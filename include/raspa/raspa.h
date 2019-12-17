@@ -49,8 +49,8 @@ typedef int64_t RaspaMicroSec;
 /**
  * @brief Audio processing callback type
  *
- * @param input Audio input buffer in interleaved format
- * @param output Audio output buffer in interleaved format
+ * @param input Audio input buffers in contiguous, non-interleaved format
+ * @param output Audio output buffer in contiguous, non-interleaved format
  * @param data Opaque pointer to user-provided data given during callback registration
  */
 typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);

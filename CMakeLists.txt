@@ -99,7 +99,7 @@ else()
 endif()
 
 target_compile_features(raspa PUBLIC c_std_99)
-target_compile_options(raspa PRIVATE -Wall -Wextra -Wno-discarded-qualifiers)
+target_compile_options(raspa PRIVATE -Wall -Wextra -Wno-discarded-qualifiers -ffast-math)
 
 #Set compile macros on the target
 target_compile_definitions(raspa PRIVATE -DRASPA_N_INPUT_CHANNELS=${RASPA_N_INPUT_CHANNELS}

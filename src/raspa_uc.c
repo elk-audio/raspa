@@ -190,7 +190,24 @@ int raspa_init()
     }
     argv[argc] = NULL;
     strcpy(argv[0], "raspa");
-    strcpy(argv[1], "--cpu-affinity=0,1,2,3");
+
+    // add cpu affinity argument to xenomai init setting it to all cores.
+    strcpy(argv[1], "--cpu-affinity=");
+    for (int i = 0; i < get_nprocs(); i++)
+    {
+        char arg_cpu_num[2];
+        sprintf(arg_cpu_num, "%d", i);
+
+        // add cpu number to the list
+        strncat(argv[1], arg_cpu_num, 2);
+
+        // add comma except for last cpu number
+        if(i != get_nprocs()-1)
+        {
+            strncat(argv[1], ",", 2);
+        }
+    }
+
     optind = 1;
 
     xenomai_init(&argc, (char* const**) &argv);

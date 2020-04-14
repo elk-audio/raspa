@@ -10,19 +10,6 @@ project(raspalib)
 
 option(RASPA_WITH_APPS "Build included applications" OFF)
 option(RASPA_WITH_TESTS "Build and run unit tests" ON)
-option(RASPA_WITH_UCONTROLLER "Build for micro controller based platforms" OFF)
-set(RASPA_N_INPUT_CHANNELS 8 CACHE STRING "Number of input hw channels")
-set(RASPA_N_OUTPUT_CHANNELS 8 CACHE STRING "Number of output hw channels")
-
-if(RASPA_N_INPUT_CHANNELS GREATER RASPA_N_OUTPUT_CHANNELS)
-    message( "Num codec channels is ${RASPA_N_INPUT_CHANNELS}")
-else()
-    message( "Num codec channels is ${RASPA_N_OUTPUT_CHANNELS}")
-endif()
-
-if (${RASPA_WITH_UCONTROLLER})
-    message("Building for micro-controller based platforms")
-endif()
 
 #######################
 #  Cross compilation  #
@@ -68,20 +55,12 @@ endfunction()
 
 # Enumerate all the headers separately so that CLion can index them
 
-set(RASPALIB_EXTRA_CLION_SOURCES src/driver_config.h)
+set(RASPALIB_EXTRA_CLION_SOURCES src/driver_config.h
+                                 src/raspa_error_codes.h
+                                 src/raspa_intf.h
+                                 src/sample_conversion.h)
 
-if (${RASPA_WITH_UCONTROLLER})
-    set(RASPALIB_COMPILATION_UNITS src/raspa_uc.c
-                                   src/delay_error_filter.c
-                                   src/com_task.c
-                                   src/fifo.c)
-    set(RASPALIB_EXTRA_CLION_SOURCES ${RASPALIB_EXTRA_CLION_SOURCES}
-                                     src/delay_error_filter.h
-                                     src/com_task.h
-                                     src/fifo.h)
-else()
-    set(RASPALIB_COMPILATION_UNITS src/raspa.c)
-endif()
+set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)
 
 set(RASPALIB_SOURCE_FILES "${RASPALIB_COMPILATION_UNITS}" "${RASPALIB_EXTRA_CLION_SOURCES}")
 
@@ -89,21 +68,12 @@ add_library(raspa STATIC ${RASPALIB_SOURCE_FILES})
 add_xenomai_to_target(raspa)
 
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/
-                                         ${PROJECT_SOURCE_DIR}/src/sample_conversion)
+target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
 
-if (${RASPA_WITH_UCONTROLLER})
-    target_link_libraries(raspa PRIVATE pthread audio_control_protocol)
-else()
-    target_link_libraries(raspa PRIVATE pthread)
-endif()
+target_link_libraries(raspa PRIVATE pthread)
 
-target_compile_features(raspa PUBLIC c_std_99)
-target_compile_options(raspa PRIVATE -Wall -Wextra -Wno-discarded-qualifiers -ffast-math)
-
-#Set compile macros on the target
-target_compile_definitions(raspa PRIVATE -DRASPA_N_INPUT_CHANNELS=${RASPA_N_INPUT_CHANNELS}
-                                         -DRASPA_N_OUTPUT_CHANNELS=${RASPA_N_OUTPUT_CHANNELS})
+set_property(TARGET raspa PROPERTY CXX_STANDARD 17)
+target_compile_options(raspa PRIVATE -Wall -Wextra -ffast-math -feliminate-unused-debug-types -fno-exceptions)
 
 #############
 #  Install  #
@@ -126,7 +96,4 @@ if (${RASPA_WITH_APPS})
 endif()
 if (${RASPA_WITH_TESTS})
     add_subdirectory(test)
-endif()
-if (${RASPA_WITH_UCONTROLLER})
-    add_subdirectory(audio_control_protocol)
 endif()

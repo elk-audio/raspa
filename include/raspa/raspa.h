@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 Modern Ancient Instruments Networked AB, dba Elk
+ * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
  * RASPA is free software: you can redistribute it and/or modify it under the terms
  * of the GNU General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
@@ -13,10 +13,8 @@
  */
 
 /**
- * @brief C module for low-level access to RTDM Audio device
- *        from userspace. Provides access to RT driver through a
- *        typical callback registration service.
- * @copyright 2017-2019 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @brief C API for low-level access to RTDM Audio device from userspace.
+ * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 
 #ifndef RASPA_H_
@@ -56,10 +54,10 @@ typedef int64_t RaspaMicroSec;
 typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
 
 /**
- * @brief Initialization function,
- *        setting up Xenomai and locking memory for the process.
- *        Must be called before any other raspa_ calls.
- * @return 0 in case of success, error code from mlockall otherwise
+ * @brief Initialization function, setting up Xenomai and locking memory for the
+ *        process. Must be called before any other raspa_ calls.
+ * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()
+ *         can be used to get a human readable string for the returned error code.
  */
 int raspa_init();
 
@@ -71,45 +69,40 @@ int raspa_init();
  * @param user_data Opaque pointer of generic user data passed to callback during process
  * @param debug_flags Bitwise combination of debug flags to use
  *
- * @return 0 if device opened correctly, negative value otherwise.
- *         raspa_get_error_msg() can be used to get a human readable string for the
- *         returned error code.
+ * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()
+ *         can be used to get a human readable string for the returned error code.
  */
 int raspa_open(int buffer_size,
                RaspaProcessCallback process_callback,
                void* user_data, unsigned int debug_flags);
 
 /**
- * @brief Get the sampling rate of driver. This function can only be called
- *        after raspa_open since the parameter can only be read after it has
- *        been checked that the driver exists and can be opened. Otherwise, this
- *        function will return 0 as the sampling rate
+ * @brief Get the sampling rate of driver. Should be called after raspa_open().
  *
- * @return float The sampling rate of the rt audio driver if the driver exists
- *                and has been opened, 0.0 if not.
+ * @return float The sampling rate of the rt audio driver if raspa_open() is
+ *               successful, 0.0 if not.
  */
 float raspa_get_sampling_rate();
 
 /**
- * Get the number of input channels of the underlying codec. This will always
- * be less than or equal to the total number of channels of the codec.
- * @return The number of input channels
+ * @brief Get the number of input channels of the underlying codec. Should be
+ *        called after raspa_open()
+ * @return The number of input channels if raspa_open() is successful, 0 if not
  */
 int raspa_get_num_input_channels();
 
 /**
- * Get the number of output channels of the underlying codec. This will always
- * be less than or equal to the total number of channels of the codec.
- * @return The number of output channels
+ * @brief Get the number of output channels of the underlying codec. Should be
+ *        called after raspa_open
+ * @return The number of output channels if raspa_open() is successful, 0 if not
  */
 int raspa_get_num_output_channels();
 
 /**
  * @brief Starts the real-time Xenomai task to perform audio processing
  *
- * @return 0 if RT task started correctly, negative value otherwise.
- *         raspa_get_error_msg() can be used to get a human readable string for the
- *         returned error code.
+ * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()
+ *         can be used to get a human readable string for the returned error code.
  */
 int raspa_start_realtime();
 
@@ -140,7 +133,8 @@ RaspaMicroSec raspa_get_output_latency();
 /**
  * @brief Stop real-time processing task and close device.
  *
- * @return 0 if device is closed correctly, negative value otherwise.
+ * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()
+ *         can be used to get a human readable string for the returned error code.
  */
 int raspa_close();
 

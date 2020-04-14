@@ -101,6 +101,15 @@ int main(int argc, char *argv[])
         exit(res);
     }
 
+    signal(SIGINT, sigint_handler);
+
+    res = raspa_open(num_frames, &process, 0, 0);
+    if (res < 0)
+    {
+        fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));
+        exit(res);
+    }
+
     // Calculate total num samples
     if(raspa_get_num_input_channels() > raspa_get_num_output_channels())
     {
@@ -109,15 +118,6 @@ int main(int argc, char *argv[])
     else
     {
         num_samples = num_frames * raspa_get_num_output_channels();
-    }
-
-    signal(SIGINT, sigint_handler);
-
-    res = raspa_open(num_frames, &process, 0, 0);
-    if (res < 0)
-    {
-        fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));
-        exit(res);
     }
 
     printf("Audio process started.\n");

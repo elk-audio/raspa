@@ -174,6 +174,12 @@ public:
             SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_CREATE, res);
         }
 
+        res = _get_audio_info_from_driver();
+        if(res < 0)
+        {
+            return res;
+        }
+
         return RASPA_SUCCESS;
     }
 
@@ -184,12 +190,6 @@ public:
         _buffer_size_in_frames = buffer_size;
 
         auto res = _check_driver_compatibility();
-        if(res < 0)
-        {
-            return res;
-        }
-
-        res = _get_audio_info_from_driver();
         if(res < 0)
         {
             return res;
@@ -513,7 +513,6 @@ protected:
         _num_output_chans = res;
 
         _num_codec_chans = (_num_input_chans > _num_output_chans) ? _num_input_chans : _num_output_chans;
-        _buffer_size_in_samples = _buffer_size_in_frames * _num_codec_chans;
 
         res = _read_driver_param("audio_format");
         switch (res)
@@ -611,6 +610,8 @@ protected:
      */
     void _init_driver_buffers()
     {
+        _buffer_size_in_samples = _buffer_size_in_frames * _num_codec_chans;
+
         _driver_buffer_audio_in[0] = _driver_buffer;
         _driver_buffer_audio_in[1] = _driver_buffer + _buffer_size_in_samples;
 

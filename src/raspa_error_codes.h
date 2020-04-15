@@ -44,12 +44,8 @@ namespace raspa {
     X(109, RASPA_EUNMAP, "Raspa: Failed to unmap driver buffers. ")\
     X(110, RASPA_EDEVICE_OPEN, "Raspa: Failed to open driver. ")\
     X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver. ")\
-    X(200, RASPA_EPARAM_BUFFSIZE, "Raspa: Unable to read buffer size param from driver. ")\
-    X(201, RASPA_EPARAM_VERSION, "Raspa: Unable to read version param from driver. ")\
-    X(202, RASPA_EPARAM_FS, "Raspa: Unable to read sampling freq param from driver. ")\
-    X(203, RASPA_EPARAM_INPUTCHANS, "Raspa: Unable to read num input channels param from driver. ")\
-    X(204, RASPA_EPARAM_OUTPUTCHANS, "Raspa: Unable to read num output channels param from driver. ")\
-    X(205, RASPA_EPARAM_CODECFORMAT, "Raspa: Unable to read codec format param from driver. ")\
+    X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format. ")\
+    X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration.")\
 
 /**
  * @brief Macro to define the error codes as enums

@@ -453,32 +453,27 @@ protected:
      */
     int _check_driver_compatibility()
     {
-        auto res = _read_driver_param("audio_buffer_size");
-        if(res < 0)
+        auto buffer_size = _read_driver_param("audio_buffer_size");
+        auto major_version = _read_driver_param("audio_ver_maj");
+        auto minor_version = _read_driver_param("audio_ver_min");
+
+        if(buffer_size < 0 || major_version < 0 || minor_version < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_BUFFSIZE, res);
+            return -RASPA_EPARAM;
         }
-        if (_buffer_size_in_frames != res)
+
+        if (_buffer_size_in_frames != buffer_size)
         {
             return -RASPA_EBUFFSIZE;
         }
 
-        res = _read_driver_param("audio_ver_maj");
-        if(res < 0)
-        {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_VERSION, res);
-        }
-        if(REQUIRED_DRIVER_VERSION_MAJ != res)
+        if(REQUIRED_DRIVER_VERSION_MAJ != major_version)
         {
             return -RASPA_EVERSION;
         }
 
-        res = _read_driver_param("audio_ver_min");
-        if(res < 0)
-        {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_VERSION, res);
-        }
-        if(REQUIRED_DRIVER_VERSION_MIN != res)
+
+        if(REQUIRED_DRIVER_VERSION_MIN != minor_version)
         {
             return -RASPA_EVERSION;
         }
@@ -492,42 +487,32 @@ protected:
      */
     int _get_audio_info_from_driver()
     {
-        auto res = _read_driver_param("audio_sampling_rate");
-        if (res < 0)
+        _sampling_freq = _read_driver_param("audio_sampling_rate");
+        _num_input_chans = _read_driver_param("audio_input_channels");
+        _num_output_chans = _read_driver_param("audio_output_channels");
+        auto codec_format = _read_driver_param("audio_format");
+
+        if(_sampling_freq < 0 || _num_output_chans < 0
+           || _num_output_chans < 0 || codec_format < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_FS, res);
+            return -RASPA_EPARAM;
         }
-        _sampling_freq = res;
 
-        res = _read_driver_param("audio_input_channels");
-        if (res < 0)
-        {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_INPUTCHANS, res);
-        }
-        _num_input_chans = res;
-
-        res = _read_driver_param("audio_output_channels");
-        if (res < 0)
-        {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_OUTPUTCHANS, res);
-        }
-        _num_output_chans = res;
-
-        _num_codec_chans = (_num_input_chans > _num_output_chans) ? _num_input_chans : _num_output_chans;
-
-        res = _read_driver_param("audio_format");
-        switch (res)
+        switch (codec_format)
         {
         case INT24_LJ:
         case INT24_RJ:
         case INT24_I2S:
         case INT32_RJ:
-            _codec_format = (RaspaCodecFormat)res;
+            _codec_format = (RaspaCodecFormat)codec_format;
             break;
 
         default:
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EPARAM_CODECFORMAT, res);
+            SET_ERROR_VAL_AND_RET_CODE(RASPA_ECODEC_FORMAT, codec_format);
         }
+
+        _num_codec_chans = (_num_input_chans > _num_output_chans) ? _num_input_chans : _num_output_chans;
+
         return RASPA_SUCCESS;
     }
 

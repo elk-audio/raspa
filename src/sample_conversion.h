@@ -136,10 +136,9 @@ public:
      */
     void codec_format_to_float32n(float* dst, int32_t* src) override
     {
-        int n, k;
-        for (n = 0; n < buffer_size_in_frames; n++)
+        for (int n = 0; n < buffer_size_in_frames; n++)
         {
-            for (k = 0; k < num_channels; k++)
+            for (int k = 0; k < num_channels; k++)
             {
                 int32_t x = *src++;
                 float y = _codec_format_to_int32rj(x) * INT24_TO_FLOAT_SCALING_FACTOR;
@@ -157,10 +156,9 @@ public:
      */
     void float32n_to_codec_format(int32_t* dst, float* src) override
     {
-        int n, k;
-        for (k = 0; k < num_channels; k++)
+        for (int k = 0; k < num_channels; k++)
         {
-            for (n = 0; n < buffer_size_in_frames; n++)
+            for (int n = 0; n < buffer_size_in_frames; n++)
             {
                 float x = *src++;
 
@@ -174,7 +172,7 @@ public:
                 }
 
                 int32_t sample = (int32_t )(x * FLOAT_TO_INT24_SCALING_FACTOR);
-                dst[n * num_channels + k] = _int32rj_to_codec_format(sample);
+                dst[(n * num_channels) + k] = _int32rj_to_codec_format(sample);
             }
         }
     }

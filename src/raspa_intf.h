@@ -34,7 +34,6 @@
 #include <cobalt/pthread.h>
 #include <cobalt/time.h>
 #include <cobalt/sys/ioctl.h>
-#include <stdio.h>
 
 #pragma GCC diagnostic pop
 

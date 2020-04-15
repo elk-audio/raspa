@@ -113,6 +113,7 @@ public:
                   _user_buffers_allocated(false),
                   _mmap_initialized(false),
                   _task_started(false),
+                  _res_get_audio_info(0),
                   _user_data(nullptr),
                   _user_callback(nullptr)
     {}
@@ -171,14 +172,10 @@ public:
         auto res = mlockall(MCL_CURRENT | MCL_FUTURE);
         if(res < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_CREATE, res);
-        }
-
-        res = _get_audio_info_from_driver();
-        if(res < 0)
-        {
             return res;
         }
+
+        _res_get_audio_info = _get_audio_info_from_driver();
 
         return RASPA_SUCCESS;
     }
@@ -193,6 +190,11 @@ public:
         if(res < 0)
         {
             return res;
+        }
+
+        if(_res_get_audio_info < 0)
+        {
+            return _res_get_audio_info;
         }
 
         _init_sample_converter();
@@ -772,6 +774,9 @@ protected:
     bool _user_buffers_allocated;
     bool _mmap_initialized;
     bool _task_started;
+
+    // result of get_audio_info_from_driver()
+    int _res_get_audio_info;
 
     // rt task data
     void* _user_data;

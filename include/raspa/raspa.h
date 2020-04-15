@@ -55,9 +55,8 @@ typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
 
 /**
  * @brief Initialization function, setting up Xenomai and locking memory for the
- *        process. Must be called before any other raspa_ calls.
- * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()
- *         can be used to get a human readable string for the returned error code.
+ *        process. Must be called before any other raspa calls.
+ * @return 0 in case of success, linux error code otherwise
  */
 int raspa_init();
 

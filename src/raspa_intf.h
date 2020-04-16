@@ -606,7 +606,7 @@ protected:
         _driver_buffer_audio_out[1] =
                 _driver_buffer_audio_out[0] + _buffer_size_in_samples;
 
-        _driver_cv_out = (uint32_t*)_driver_buffer_audio_out[0] + _buffer_size_in_samples;
+        _driver_cv_out = (uint32_t*)_driver_buffer_audio_out[1] + _buffer_size_in_samples;
         _driver_cv_in = _driver_cv_out + 1;
     }
 

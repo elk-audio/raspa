@@ -421,6 +421,10 @@ std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_for
     case INT32_RJ:
         INSTANTIATE_WITH_FIXED_CODEC_FORMAT(INT32_RJ, buffer_size_in_frames, num_channels);
         break;
+
+    case NUM_CODEC_FORMATS:
+        // never used. Implemented here to suppress warnings
+        break;
     }
 
     return std::make_unique<SampleConverterGeneric>(codec_format, buffer_size_in_frames, num_channels);

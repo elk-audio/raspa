@@ -40,7 +40,8 @@ enum RaspaCodecFormat
     INT24_LJ = 1,
     INT24_I2S,
     INT24_RJ,
-    INT32_RJ
+    INT32_RJ,
+    NUM_CODEC_FORMATS
 };
 
 #endif //RASPA_CONFIG_H_H

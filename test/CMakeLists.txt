@@ -49,9 +49,8 @@ add_executable(test_runner ${TEST_FILES})
 target_compile_options(test_runner PRIVATE -DDISABLE_LOGGING)
 target_include_directories(test_runner PRIVATE ${TEST_INCLUDE_DIRS})
 target_link_libraries(test_runner PRIVATE ${TEST_LINK_LIBRARIES})
+set_property(TARGET test_runner PROPERTY CXX_STANDARD 17)
 
-target_compile_definitions(test_runner PUBLIC -DRASPA_N_INPUT_CHANNELS=${RASPA_N_INPUT_CHANNELS}
-                                              -DRASPA_N_OUTPUT_CHANNELS=${RASPA_N_OUTPUT_CHANNELS})
 add_test(test_runner unit_tests)
 
 

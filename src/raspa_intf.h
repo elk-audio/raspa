@@ -103,7 +103,7 @@ public:
                   _buf_idx(0),
                   _stop_request_flag(false),
                   _break_on_mode_sw(false),
-                  _sampling_freq(0),
+                  _sample_rate(0),
                   _num_codec_chans(0),
                   _buffer_size_in_frames(0),
                   _buffer_size_in_samples(0),
@@ -335,7 +335,7 @@ public:
 
     float get_sampling_rate()
     {
-        return (float)_sampling_freq;
+        return (float)_sample_rate;
     }
 
     int get_num_input_channels()
@@ -388,9 +388,9 @@ public:
     RaspaMicroSec get_output_latency()
     {
         // TODO - really crude approximation
-        if(_sampling_freq > 0)
+        if(_sample_rate > 0)
         {
-            return (_buffer_size_in_samples * 1000000) / _sampling_freq;
+            return (_buffer_size_in_samples * 1000000) / _sample_rate;
         }
 
         return 0;
@@ -487,12 +487,12 @@ protected:
      */
     int _get_audio_info_from_driver()
     {
-        _sampling_freq = _read_driver_param("audio_sampling_rate");
+        _sample_rate = _read_driver_param("audio_sampling_rate");
         _num_input_chans = _read_driver_param("audio_input_channels");
         _num_output_chans = _read_driver_param("audio_output_channels");
         auto codec_format = _read_driver_param("audio_format");
 
-        if(_sampling_freq < 0 || _num_output_chans < 0
+        if(_sample_rate < 0 || _num_output_chans < 0
            || _num_output_chans < 0 || codec_format < 0)
         {
             return -RASPA_EPARAM;
@@ -744,7 +744,7 @@ protected:
     bool _break_on_mode_sw;
 
     // audio buffer parameters
-    int _sampling_freq;
+    int _sample_rate;
     int _num_codec_chans;
     int _num_input_chans;
     int _num_output_chans;

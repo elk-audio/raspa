@@ -49,6 +49,11 @@
 #include <stdio.h>
 #endif
 
+/*
+ * This variable is defined by xenomai init. It is used to index the number
+ * of command line arguments passed to xenomai. Since these arguments are passed
+ * manually, this variable is incremented in the init() function.
+ */
 extern int optind;
 
 namespace raspa {

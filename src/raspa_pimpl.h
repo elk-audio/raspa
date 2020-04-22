@@ -176,7 +176,7 @@ public:
 
 
         auto res = mlockall(MCL_CURRENT | MCL_FUTURE);
-        if(res < 0)
+        if (res < 0)
         {
             return res;
         }
@@ -193,31 +193,31 @@ public:
         _buffer_size_in_frames = buffer_size;
 
         auto res = _check_driver_compatibility();
-        if(res < 0)
+        if (res < 0)
         {
             return res;
         }
 
-        if(_res_get_audio_info < 0)
+        if (_res_get_audio_info < 0)
         {
             return _res_get_audio_info;
         }
 
         _init_sample_converter();
 
-        if(debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
+        if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
         {
             _break_on_mode_sw = true;
         }
 
         res = _open_device();
-        if(res < 0)
+        if (res < 0)
         {
             return res;
         }
 
         res = _get_driver_buffers();
-        if(res < 0)
+        if (res < 0)
         {
             _cleanup();
             return res;
@@ -226,7 +226,7 @@ public:
         _init_driver_buffers();
 
         res = _init_user_buffers();
-        if(res < 0)
+        if (res < 0)
         {
             _cleanup();
             return res;
@@ -244,7 +244,7 @@ public:
     {
         // Initialize RT task
         _task_started = false;
-        struct sched_param rt_params = { .sched_priority = RASPA_PROCESSING_TASK_PRIO };
+        struct sched_param rt_params = {.sched_priority = RASPA_PROCESSING_TASK_PRIO};
         pthread_attr_t task_attributes;
         __cobalt_pthread_attr_init(&task_attributes);
 
@@ -257,7 +257,8 @@ public:
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
         CPU_SET(0, &cpuset);
-        auto res = pthread_attr_setaffinity_np(&task_attributes, sizeof(cpu_set_t), &cpuset);
+        auto res = pthread_attr_setaffinity_np(&task_attributes,
+                                               sizeof(cpu_set_t), &cpuset);
         if (res < 0)
         {
             _cleanup();
@@ -266,7 +267,8 @@ public:
         }
 
         // Create rt thread
-        res = __cobalt_pthread_create(&_processing_task, &task_attributes, &raspa_intf_task_entry, this);
+        res = __cobalt_pthread_create(&_processing_task, &task_attributes,
+                                      &raspa_intf_task_entry, this);
         if (res < 0)
         {
             _cleanup();
@@ -277,8 +279,9 @@ public:
         _task_started = true;
         usleep(THREAD_CREATE_DELAY_US);
 
-        // After Xenomai init + RT thread creation, all non-RT threads have the affinity restricted to one
-        // single core. This reverts back to the default of using all cores
+        /* After Xenomai init + RT thread creation, all non-RT threads have the
+         * affinity restricted to one single core. This reverts back to the
+         * default of using all cores */
         CPU_ZERO(&cpuset);
         for (int i = 0; i < get_nprocs(); i++)
         {
@@ -287,7 +290,7 @@ public:
         pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
         res = __cobalt_ioctl(_device_handle, RASPA_PROC_START);
-        if(res < 0)
+        if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_ETASK_START, res);
             return -RASPA_ETASK_START;
@@ -301,7 +304,7 @@ public:
      */
     void rt_loop()
     {
-        while(1)
+        while (1)
         {
             auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
             if (res < 0)
@@ -326,9 +329,11 @@ public:
             }
             else
             {
-                _sample_converter->codec_format_to_float32n(_user_audio_in, _driver_buffer_audio_in[_buf_idx]);
+                _sample_converter->codec_format_to_float32n(_user_audio_in,
+                                                            _driver_buffer_audio_in[_buf_idx]);
                 _user_callback(_user_audio_in, _user_audio_out, _user_data);
-                _sample_converter->float32n_to_codec_format(_driver_buffer_audio_out[_buf_idx], _user_audio_out);
+                _sample_converter->float32n_to_codec_format(
+                        _driver_buffer_audio_out[_buf_idx], _user_audio_out);
             }
 
             res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
@@ -345,7 +350,7 @@ public:
 
     float get_sampling_rate()
     {
-        return (float)_sample_rate;
+        return (float) _sample_rate;
     }
 
     int get_num_input_channels()
@@ -380,7 +385,7 @@ public:
         auto res = __cobalt_clock_gettime(CLOCK_MONOTONIC, &tp);
         if (res == 0)
         {
-            time = (RaspaMicroSec)tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
+            time = (RaspaMicroSec) tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
         }
 
         return time;
@@ -394,7 +399,7 @@ public:
     RaspaMicroSec get_output_latency()
     {
         // TODO - really crude approximation
-        if(_sample_rate > 0)
+        if (_sample_rate > 0)
         {
             return (_buffer_size_in_samples * 1000000) / _sample_rate;
         }
@@ -409,7 +414,7 @@ public:
         usleep(CLOSE_DELAY_US);
 
         auto res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
-        if(res < 0)
+        if (res < 0)
         {
             _cleanup();
             _raspa_error_code.set_error_val(RASPA_ETASK_STOP, res);
@@ -464,7 +469,7 @@ protected:
         auto major_version = _read_driver_param("audio_ver_maj");
         auto minor_version = _read_driver_param("audio_ver_min");
 
-        if(buffer_size < 0 || major_version < 0 || minor_version < 0)
+        if (buffer_size < 0 || major_version < 0 || minor_version < 0)
         {
             return -RASPA_EPARAM;
         }
@@ -474,13 +479,13 @@ protected:
             return -RASPA_EBUFFSIZE;
         }
 
-        if(REQUIRED_DRIVER_VERSION_MAJ != major_version)
+        if (REQUIRED_DRIVER_VERSION_MAJ != major_version)
         {
             return -RASPA_EVERSION;
         }
 
 
-        if(REQUIRED_DRIVER_VERSION_MIN != minor_version)
+        if (REQUIRED_DRIVER_VERSION_MIN != minor_version)
         {
             return -RASPA_EVERSION;
         }
@@ -499,8 +504,8 @@ protected:
         _num_output_chans = _read_driver_param("audio_output_channels");
         auto codec_format = _read_driver_param("audio_format");
 
-        if(_sample_rate < 0 || _num_output_chans < 0
-           || _num_output_chans < 0 || codec_format < 0)
+        if (_sample_rate < 0 || _num_output_chans < 0
+            || _num_output_chans < 0 || codec_format < 0)
         {
             return -RASPA_EPARAM;
         }
@@ -519,7 +524,8 @@ protected:
             return -RASPA_ECODEC_FORMAT;
         }
 
-        _num_codec_chans = (_num_input_chans > _num_output_chans) ? _num_input_chans : _num_output_chans;
+        _num_codec_chans = (_num_input_chans > _num_output_chans)
+                           ? _num_input_chans : _num_output_chans;
 
         return RASPA_SUCCESS;
     }
@@ -548,12 +554,12 @@ protected:
      */
     int _close_device()
     {
-        if(_device_opened)
+        if (_device_opened)
         {
             auto res = __cobalt_close(_device_handle);
             _device_opened = false;
 
-            if(res < 0)
+            if (res < 0)
             {
                 _raspa_error_code.set_error_val(RASPA_EDEVICE_CLOSE, res);
                 return -RASPA_EDEVICE_CLOSE;
@@ -571,8 +577,9 @@ protected:
     {
         _mmap_initialized = false;
         _driver_buffer = (int32_t*) __cobalt_mmap(NULL, _kernel_buffer_mem_size,
-                                                  PROT_READ|PROT_WRITE,
-                                                  MAP_SHARED, _device_handle, 0);
+                                                  PROT_READ | PROT_WRITE,
+                                                  MAP_SHARED, _device_handle,
+                                                  0);
         if (_driver_buffer == MAP_FAILED)
         {
             _raspa_error_code.set_error_val(RASPA_ENOMEM, errno);
@@ -589,13 +596,13 @@ protected:
      */
     int _release_driver_buffers()
     {
-        if(_mmap_initialized)
+        if (_mmap_initialized)
         {
             auto res = munmap(_driver_buffer, _kernel_buffer_mem_size);
             _mmap_initialized = false;
-            if(res < 0)
+            if (res < 0)
             {
-                _raspa_error_code.set_error_val(RASPA_EUNMAP,res);
+                _raspa_error_code.set_error_val(RASPA_EUNMAP, res);
                 return -RASPA_EUNMAP;
             }
         }
@@ -618,7 +625,8 @@ protected:
         _driver_buffer_audio_out[1] =
                 _driver_buffer_audio_out[0] + _buffer_size_in_samples;
 
-        _driver_cv_out = (uint32_t*)_driver_buffer_audio_out[1] + _buffer_size_in_samples;
+        _driver_cv_out = (uint32_t*) _driver_buffer_audio_out[1] +
+                         _buffer_size_in_samples;
         _driver_cv_in = _driver_cv_out + 1;
     }
 
@@ -629,10 +637,12 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
-        int res = posix_memalign((void**)&_user_audio_in, 16, _buffer_size_in_samples * sizeof(float))
-                   || posix_memalign((void**)&_user_audio_out, 16, _buffer_size_in_samples * sizeof(float));
+        int res = posix_memalign((void**) &_user_audio_in, 16,
+                                 _buffer_size_in_samples * sizeof(float))
+                  || posix_memalign((void**) &_user_audio_out, 16,
+                                    _buffer_size_in_samples * sizeof(float));
 
-        if(res < 0)
+        if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EUSER_BUFFERS, res);
             return -RASPA_EUSER_BUFFERS;
@@ -647,7 +657,7 @@ protected:
      */
     void _free_user_buffers()
     {
-        if(_user_buffers_allocated)
+        if (_user_buffers_allocated)
         {
             free(_user_audio_in);
             free(_user_audio_out);
@@ -661,8 +671,8 @@ protected:
     void _init_sample_converter()
     {
         _sample_converter = get_sample_converter(_codec_format,
-                _buffer_size_in_frames,
-                _num_codec_chans);
+                                                 _buffer_size_in_frames,
+                                                 _num_codec_chans);
     }
 
     /**
@@ -679,12 +689,12 @@ protected:
      */
     int _stop_rt_task()
     {
-        if(_task_started)
+        if (_task_started)
         {
             auto res = pthread_cancel(_processing_task);
             res |= __cobalt_pthread_join(_processing_task, NULL);
             _task_started = false;
-            if(res < 0)
+            if (res < 0)
             {
                 _raspa_error_code.set_error_val(RASPA_ETASK_CANCEL, res);
                 return -RASPA_ETASK_CANCEL;
@@ -715,12 +725,12 @@ protected:
      */
     void _clear_driver_buffers()
     {
-        if(!_mmap_initialized)
+        if (!_mmap_initialized)
         {
             return;
         }
 
-        for(int i = 0; i < _buffer_size_in_samples; i++)
+        for (int i = 0; i < _buffer_size_in_samples; i++)
         {
             _driver_buffer_audio_out[0][i] = 0;
             _driver_buffer_audio_out[1][i] = 0;

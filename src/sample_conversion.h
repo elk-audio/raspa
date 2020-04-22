@@ -86,7 +86,8 @@ public:
             for (int k = 0; k < num_channels; k++)
             {
                 int32_t x = *src++;
-                float y = _codec_format_to_int32rj(x) * INT24_TO_FLOAT_SCALING_FACTOR;
+                float y = _codec_format_to_int32rj(x) *
+                          INT24_TO_FLOAT_SCALING_FACTOR;
                 dst[(k * buffer_size_in_frames) + n] = y;
             }
         }
@@ -116,7 +117,7 @@ public:
                     x = 1.0f;
                 }
 
-                int32_t sample = (int32_t )(x * FLOAT_TO_INT24_SCALING_FACTOR);
+                auto sample = (int32_t) (x * FLOAT_TO_INT24_SCALING_FACTOR);
                 dst[(n * num_channels) + k] = _int32rj_to_codec_format(sample);
             }
         }
@@ -208,9 +209,9 @@ public:
     SampleConverterGeneric(RaspaCodecFormat codec_format,
                            int buffer_size_in_frames,
                            int num_channels) : _codec_format(codec_format),
-                                               _buffer_size_in_frames(buffer_size_in_frames),
+                                               _buffer_size_in_frames(
+                                                       buffer_size_in_frames),
                                                _num_channels(num_channels)
-
     {}
 
     ~SampleConverterGeneric() = default;
@@ -228,7 +229,8 @@ public:
             for (int k = 0; k < _num_channels; k++)
             {
                 int32_t x = *src++;
-                float y = _codec_format_to_int32rj(x) * INT24_TO_FLOAT_SCALING_FACTOR;
+                float y = _codec_format_to_int32rj(x) *
+                          INT24_TO_FLOAT_SCALING_FACTOR;
                 dst[(k * _buffer_size_in_frames) + n] = y;
             }
         }
@@ -258,7 +260,7 @@ public:
                     x = 1.0f;
                 }
 
-                int32_t sample = (int32_t )(x * FLOAT_TO_INT24_SCALING_FACTOR);
+                auto sample = (int32_t) (x * FLOAT_TO_INT24_SCALING_FACTOR);
                 dst[(n * _num_channels) + k] = _int32rj_to_codec_format(sample);
             }
         }
@@ -314,7 +316,7 @@ private:
         {
             return (sample << 7) & 0x7FFFFF00;
         }
-        else if(_codec_format == RaspaCodecFormat::INT24_RJ)
+        else if (_codec_format == RaspaCodecFormat::INT24_RJ)
         {
             return sample & 0x00FFFFFF;
         }
@@ -340,10 +342,10 @@ private:
  * @return SampleConverterOptimized object if buffer size is supported,
  * SampleConverterGeneric object otherwise.
  */
-template <RaspaCodecFormat codec_format, int num_channels>
+template<RaspaCodecFormat codec_format, int num_channels>
 std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
 {
-    switch(buffer_size_in_frames)
+    switch (buffer_size_in_frames)
     {
     case 8:
         return std::make_unique<SampleConverterOptimized<codec_format,
@@ -394,9 +396,9 @@ std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
  * @return SampleConverterOptimized object if buffer size and num channels is
  *         supported, SampleConverterGeneric object otherwise.
  */
-template <RaspaCodecFormat codec_format>
+template<RaspaCodecFormat codec_format>
 std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames,
-                                                     int num_channels)
+                                                      int num_channels)
 {
     switch (num_channels)
     {
@@ -426,11 +428,13 @@ std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames,
  * @param codec_format The codec format
  * @param buffer_size_in_frames The buffer size in frames
  * @param num_channels The number of channels.
- * @return
+ * @return A SampleConverterOptimized instance if buffer size and num channels
+ *         is supported, SampleConverterGeneric instance otherwise.
  */
-std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_format,
-                                                      int buffer_size_in_frames,
-                                                      int num_channels)
+std::unique_ptr<SampleConverter>
+get_sample_converter(RaspaCodecFormat codec_format,
+                     int buffer_size_in_frames,
+                     int num_channels)
 {
     switch (codec_format)
     {
@@ -440,7 +444,7 @@ std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_for
 
     case RaspaCodecFormat::INT24_I2S:
         return get_sample_converter<RaspaCodecFormat::INT24_I2S>
-                (buffer_size_in_frames,num_channels);
+                (buffer_size_in_frames, num_channels);
 
     case RaspaCodecFormat::INT24_RJ:
         return get_sample_converter<RaspaCodecFormat::INT24_RJ>
@@ -455,7 +459,9 @@ std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_for
         break;
     }
 
-    return std::make_unique<SampleConverterGeneric>(codec_format, buffer_size_in_frames, num_channels);
+    return std::make_unique<SampleConverterGeneric>(codec_format,
+                                                    buffer_size_in_frames,
+                                                    num_channels);
 };
 
 } // namespace raspa

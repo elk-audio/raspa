@@ -7,12 +7,6 @@ add_subdirectory(gtest)
 enable_testing()
 
 #####################
-#  Add other tests  #
-#####################
-
-add_subdirectory(sample_conversion_test EXCLUDE_FROM_ALL)
-
-#####################
 #  Unit Test Files  #
 #####################
 

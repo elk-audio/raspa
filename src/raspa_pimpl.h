@@ -21,7 +21,7 @@
  * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 #ifndef RASPA_PIMPL_H_
-#define RASPA_PIMPL_H
+#define RASPA_PIMPL_H_
 
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
@@ -117,6 +117,8 @@ public:
                    _break_on_mode_sw(false),
                    _sample_rate(0),
                    _num_codec_chans(0),
+                   _num_input_chans(0),
+                   _num_output_chans(0),
                    _buffer_size_in_frames(0),
                    _buffer_size_in_samples(0),
                    _codec_format(RaspaCodecFormat::INT24_LJ),
@@ -309,7 +311,7 @@ public:
      */
     void rt_loop()
     {
-        while (1)
+        while (true)
         {
             auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
             if (res < 0)
@@ -350,7 +352,7 @@ public:
 #endif
             _interrupts_counter++;
         }
-        pthread_exit(NULL);
+        pthread_exit(nullptr);
     }
 
     float get_sampling_rate()
@@ -769,7 +771,6 @@ protected:
     bool _stop_request_flag;
 
     // flag to break on mode switch occurence
-    bool _debug_signal_on_mode_sw;
     bool _break_on_mode_sw;
 
     // audio buffer parameters
@@ -802,7 +803,7 @@ protected:
 
 static void* raspa_pimpl_task_entry(void* data)
 {
-    RaspaPimpl* raspa_pimpl = static_cast<RaspaPimpl*>(data);
+    auto raspa_pimpl = static_cast<RaspaPimpl*>(data);
     raspa_pimpl->rt_loop();
 
     // To suppress warnings

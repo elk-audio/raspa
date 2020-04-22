@@ -83,8 +83,8 @@ class RaspaErrorCode
 public:
     RaspaErrorCode()
     {
-        ERROR_CODES_OP(ERROR_TEXT_MAP);
-        ERROR_CODES_OP(ERROR_VAL_MAP);
+        ERROR_CODES_OP(ERROR_TEXT_MAP)
+        ERROR_CODES_OP(ERROR_VAL_MAP)
     }
 
     /**

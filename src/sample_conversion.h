@@ -465,7 +465,7 @@ get_sample_converter(RaspaCodecFormat codec_format,
     return std::make_unique<SampleConverterGeneric>(codec_format,
                                                     buffer_size_in_frames,
                                                     num_channels);
-};
+}
 
 } // namespace raspa
 

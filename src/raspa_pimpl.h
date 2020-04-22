@@ -13,14 +13,15 @@
  */
 
 /**
- * @brief Definition of class RaspaInterface, which abstracts low-level access
+ * @brief Definition of class RaspaPimpl, which abstracts low-level access
  *        to a RTDM Audio device from userspace in scenarios where the driver
  *        directly interfaces with the CODECS. Provides access to RT driver
- *        through a typical callback registration service.
+ *        through a typical callback registration service. This class provides a
+ *        private implementation of the api found in raspa.h
  * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
-#ifndef RASPA_INTF_H_
-#define RASPA_INTF_H_
+#ifndef RASPA_PIMPL_H_
+#define RASPA_PIMPL_H
 
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
@@ -85,10 +86,10 @@ namespace raspa {
 
 /**
  * @brief Entry point for the real time thread
- * @param data Contains pointer to an instance of RaspaIntf
+ * @param data Contains pointer to an instance of RaspaPimpl
  * @return nullptr
  */
-static void* raspa_intf_task_entry(void* data);
+static void* raspa_pimpl_task_entry(void* data);
 
 /**
  * @brief Interface to a audio rtdm driver that directly interfaces with a
@@ -272,7 +273,7 @@ public:
 
         // Create rt thread
         res = __cobalt_pthread_create(&_processing_task, &task_attributes,
-                                      &raspa_intf_task_entry, this);
+                                      &raspa_pimpl_task_entry, this);
         if (res < 0)
         {
             _cleanup();
@@ -799,10 +800,10 @@ protected:
     RaspaErrorCode _raspa_error_code;
 };
 
-static void* raspa_intf_task_entry(void* data)
+static void* raspa_pimpl_task_entry(void* data)
 {
-    RaspaPimpl* raspa_intf = static_cast<RaspaPimpl*>(data);
-    raspa_intf->rt_loop();
+    RaspaPimpl* raspa_pimpl = static_cast<RaspaPimpl*>(data);
+    raspa_pimpl->rt_loop();
 
     // To suppress warnings
     return nullptr;
@@ -810,4 +811,4 @@ static void* raspa_intf_task_entry(void* data)
 
 } // namespace raspa
 
-#endif // RASPA_INTF_H_
+#endif // RASPA_PIMPL_H

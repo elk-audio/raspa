@@ -61,6 +61,8 @@ namespace raspa {
 // Delay in milliseconds to wait for audio driver to close and stop its thread.
 constexpr int CLOSE_DELAY_US = 500000;
 
+constexpr int THREAD_CREATE_DELAY_US = 10000;
+
 // Number of kernel memory pages raspa allocates
 constexpr int NUM_PAGES_KERNEL_MEM = 20;
 
@@ -271,7 +273,7 @@ public:
         }
 
         _task_started = true;
-        usleep(10000);
+        usleep(THREAD_CREATE_DELAY_US);
 
         // After Xenomai init + RT thread creation, all non-RT threads have the affinity restricted to one
         // single core. This reverts back to the default of using all cores

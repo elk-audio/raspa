@@ -3,160 +3,207 @@
 #include <array>
 #include <atomic>
 
-#include "common_defs.h"
-
-#include "sample_conv.h"
+#include "sample_conversion.h"
 
 constexpr int ITERATIONS   = 500;
 constexpr int SUB_ITERATIONS = 200;
+
+constexpr int MIN_NUM_CHANS = 2;
+constexpr int MAX_NUM_CHANS = 8;
+constexpr int MIN_BUFFER_SIZE = 8;
+constexpr int MAX_BUFFER_SIZE = 1024;
 
 float float_rand(float min, float max)
 {
     return (((std::rand()) * (max - min)) / static_cast<float>(RAND_MAX)) + min;
 }
 
-template <size_t size>
-void fill_buffer(std::array<float, size>& buffer, float peak_value)
+void fill_buffer(float* buffer, float peak_value, int buffer_size_in_samples)
 {
-    for (auto& sample : buffer)
+    for(int sample = 0; sample < buffer_size_in_samples; sample++)
     {
-        sample = float_rand(-peak_value, peak_value);
+        buffer[sample] = float_rand(-peak_value, peak_value);
     }
 }
 
 struct Results
 {
     std::chrono::nanoseconds fixed;
-    std::chrono::nanoseconds semi;
     std::chrono::nanoseconds variable;
 };
 
-void print_results(Results results, int buffer_size)
+void print_results(Results results, int buffer_size, int num_chans)
 {
-    std::cout << "Buffer size: " << buffer_size << " samples. \t\t Fixed size: " << results.fixed.count();
-    std::cout << " ns, \t\t Fixed + switch: " << results.semi.count() << " ns. \t\t Variable: " << results.variable.count() << "ns\n";
+    float speed_up = (float)results.variable.count()/(float)results.fixed.count();
+    std::cout << "Buffer size: " << buffer_size << ". Num chans: " << num_chans;
+    std::cout << "\t\t Templated " << results.fixed.count() << " ns. \t\t Variable: " << results.variable.count() << "ns";
+    std::cout << "\t\t Speedup : " << speed_up << std::endl;
 }
 
-template <void (*fixed_size_function)(float*, int*), int buffer_size>
-Results run_test_int2float()
+void run_test_int2float()
 {
     Results results;
-    std::array <std::array<float, buffer_size * RASPA_N_TOTAL_CHANNELS>, SUB_ITERATIONS> float_buffers;
-    std::array <std::array<int, buffer_size * RASPA_N_TOTAL_CHANNELS>, SUB_ITERATIONS> int_buffers;
+
+    float* float_buffers[SUB_ITERATIONS];
+    int32_t* int_buffers[SUB_ITERATIONS];
+
     auto fixed_timing = std::chrono::nanoseconds(0);
-    auto semi_fixed_timing = std::chrono::nanoseconds(0);
     auto var_timing = std::chrono::nanoseconds(0);
 
-    for (int i = 0; i < ITERATIONS; ++i)
+    for(int num_chans = MIN_NUM_CHANS; num_chans <= MAX_NUM_CHANS; num_chans += 2)
     {
-        for (auto& buffer : int_buffers)
+        for (int buffer_size = MIN_BUFFER_SIZE;
+             buffer_size <= MAX_BUFFER_SIZE; buffer_size = buffer_size * 2)
         {
-            buffer.fill(std::rand());
-        }
-        std::atomic_thread_fence(std::memory_order_acquire);
+            int buffer_size_in_samples = num_chans * buffer_size;
+            fixed_timing = std::chrono::nanoseconds(0);
+            var_timing = std::chrono::nanoseconds(0);
 
-        /* Calling the fixed size function directly */
-        auto start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            fixed_size_function(float_buffers[i].data(), int_buffers[i].data());
-        }
-        auto stop_time = std::chrono::high_resolution_clock::now();
-        fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            for(int buf = 0; buf < SUB_ITERATIONS; buf++)
+            {
+                int res = posix_memalign((void**)&float_buffers[buf], 16, buffer_size_in_samples * sizeof(float))
+                          || posix_memalign((void**)&int_buffers[buf], 16, buffer_size_in_samples * sizeof(int32_t));
+                if(res < 0)
+                {
+                    std::cout << "Failed to get memory\n";
+                    return;
+                }
+            }
 
-        /* Calling the fixed size function through a switch */
-        start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            int2float(float_buffers[i].data(), int_buffers[i].data(), buffer_size);
-        }
-        stop_time = std::chrono::high_resolution_clock::now();
-        semi_fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            auto sample_converter = raspa::get_sample_converter(INT24_LJ, buffer_size, num_chans);
+            raspa::SampleConverterGeneric sample_converter_generic(INT24_LJ, buffer_size, num_chans);
 
-        /* Calling the general, variable size function */
-        start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            int2float_var(float_buffers[i].data(), int_buffers[i].data(), buffer_size);
+            for (int iter = 0; iter < ITERATIONS; ++iter)
+            {
+                for (int buf = 0; buf < SUB_ITERATIONS; buf++)
+                {
+                    for(int sample = 0; sample < buffer_size_in_samples; sample++)
+                    {
+                        int_buffers[buf][sample] = std::rand();
+                    }
+                }
+
+                std::atomic_thread_fence(std::memory_order_acquire);
+
+                /* Calling the general, variable size function */
+                auto start_time = std::chrono::high_resolution_clock::now();
+                for (int buf = 0; buf<SUB_ITERATIONS; ++buf)
+                {
+                    sample_converter_generic.codec_format_to_float32n(float_buffers[buf], int_buffers[buf]);
+                }
+                auto stop_time = std::chrono::high_resolution_clock::now();
+                var_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+
+                /* Calling the fixed size function directly */
+                start_time = std::chrono::high_resolution_clock::now();
+                for (int buf = 0; buf<SUB_ITERATIONS; ++buf)
+                {
+                    sample_converter->codec_format_to_float32n(float_buffers[buf], int_buffers[buf]);
+                }
+                stop_time = std::chrono::high_resolution_clock::now();
+                fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            }
+
+            results.fixed = fixed_timing / (ITERATIONS * SUB_ITERATIONS);
+            results.variable = var_timing / (ITERATIONS * SUB_ITERATIONS);
+
+            print_results(results, buffer_size, num_chans);
+
+            for(int buf = 0; buf < SUB_ITERATIONS; buf++)
+            {
+                free(float_buffers[buf]);
+                free(int_buffers[buf]);
+            }
         }
-        stop_time = std::chrono::high_resolution_clock::now();
-        var_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+
+        std::cout << std::endl;
     }
-    results.fixed = fixed_timing / (ITERATIONS * SUB_ITERATIONS);
-    results.semi = semi_fixed_timing / (ITERATIONS * SUB_ITERATIONS);
-    results.variable = var_timing / (ITERATIONS * SUB_ITERATIONS);
-    return results;
 }
 
-template <void (*fixed_size_function)(int*, float*), int buffer_size>
-Results run_test_float2int()
+void run_test_float2int()
 {
     Results results;
-    std::array <std::array<float, buffer_size * RASPA_N_TOTAL_CHANNELS>, SUB_ITERATIONS> float_buffers;
-    std::array <std::array<int, buffer_size * RASPA_N_TOTAL_CHANNELS>, SUB_ITERATIONS> int_buffers;
+
+    float* float_buffers[SUB_ITERATIONS];
+    int32_t* int_buffers[SUB_ITERATIONS];
+
     auto fixed_timing = std::chrono::nanoseconds(0);
-    auto semi_fixed_timing = std::chrono::nanoseconds(0);
     auto var_timing = std::chrono::nanoseconds(0);
 
-    for (int i = 0; i < ITERATIONS; ++i)
+    for(int num_chans = MIN_NUM_CHANS; num_chans <= MAX_NUM_CHANS; num_chans += 2)
     {
-        for (auto& buffer : float_buffers)
+        for(int buffer_size = MIN_BUFFER_SIZE; buffer_size <= MAX_BUFFER_SIZE; buffer_size = buffer_size * 2)
         {
-            fill_buffer(buffer, 1.2f);
-        }
-        std::atomic_thread_fence(std::memory_order_acquire);
+            int buffer_size_in_samples = num_chans * buffer_size;
+            fixed_timing = std::chrono::nanoseconds(0);
+            var_timing = std::chrono::nanoseconds(0);
 
-        /* Calling the fixed size function directly */
-        auto start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            fixed_size_function(int_buffers[i].data(), float_buffers[i].data());
-        }
-        auto stop_time = std::chrono::high_resolution_clock::now();
-        fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            for(int buf = 0; buf < SUB_ITERATIONS; buf++)
+            {
+                int res = posix_memalign((void**)&float_buffers[buf], 16, buffer_size_in_samples * sizeof(float))
+                        || posix_memalign((void**)&int_buffers[buf], 16, buffer_size_in_samples * sizeof(int32_t));
+                if(res < 0)
+                {
+                    std::cout << "Failed to get memory\n";
+                    return;
+                }
+            }
 
-        /* Calling the fixed size function through a switch */
-        start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            float2int(int_buffers[i].data(), float_buffers[i].data(), buffer_size);
-        }
-        stop_time = std::chrono::high_resolution_clock::now();
-        semi_fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            auto sample_converter = raspa::get_sample_converter(INT24_LJ, buffer_size, num_chans);
+            raspa::SampleConverterGeneric sample_converter_generic(INT24_LJ, buffer_size, num_chans);
 
-        /* Calling the general, variable size function */
-        start_time = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i<SUB_ITERATIONS; ++i)
-        {
-            float2int_var(int_buffers[i].data(), float_buffers[i].data(), buffer_size);
+            for (int iter = 0; iter < ITERATIONS; ++iter)
+            {
+                for(int buf = 0; buf < SUB_ITERATIONS; buf++)
+                {
+                    fill_buffer(float_buffers[buf], 1.2f, buffer_size_in_samples);
+                }
+
+                std::atomic_thread_fence(std::memory_order_acquire);
+
+                auto start_time = std::chrono::high_resolution_clock::now();
+                for (int buf = 0; buf<SUB_ITERATIONS; ++buf)
+                {
+                    sample_converter_generic.float32n_to_codec_format(int_buffers[buf], float_buffers[buf]);
+                }
+                auto stop_time = std::chrono::high_resolution_clock::now();
+                var_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+
+                start_time = std::chrono::high_resolution_clock::now();
+                for (int buf = 0; buf<SUB_ITERATIONS; ++buf)
+                {
+                    sample_converter->float32n_to_codec_format(int_buffers[buf], float_buffers[buf]);
+                }
+                stop_time = std::chrono::high_resolution_clock::now();
+                fixed_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+            }
+
+            results.fixed = fixed_timing / (ITERATIONS * SUB_ITERATIONS);
+            results.variable = var_timing / (ITERATIONS * SUB_ITERATIONS);
+
+            print_results(results, buffer_size, num_chans);
+
+            for(int buf = 0; buf < SUB_ITERATIONS; buf++)
+            {
+                free(float_buffers[buf]);
+                free(int_buffers[buf]);
+            }
         }
-        stop_time = std::chrono::high_resolution_clock::now();
-        var_timing += std::chrono::duration_cast<std::chrono::nanoseconds>(stop_time - start_time);
+
+        std::cout << std::endl;
     }
-    results.fixed = fixed_timing / (ITERATIONS * SUB_ITERATIONS);
-    results.semi = semi_fixed_timing / (ITERATIONS * SUB_ITERATIONS);
-    results.variable = var_timing / (ITERATIONS * SUB_ITERATIONS);
-    return results;
 }
 
 int main()
 {
-    std::cout << "Int to float conversion results: " << std::endl;
-    print_results(run_test_int2float<int2float_b8, 8>(), 8);
-    print_results(run_test_int2float<int2float_b16, 16>(), 16);
-    print_results(run_test_int2float<int2float_b32, 32>(), 32);
-    print_results(run_test_int2float<int2float_b64, 64>(), 64);
-    print_results(run_test_int2float<int2float_b128, 128>(), 128);
-    print_results(run_test_int2float<int2float_b256, 256>(), 256);
-    print_results(run_test_int2float<int2float_b512, 512>(), 512);
+    std::cout << "##############################################################\n";
+    std::cout << "Int to float conversion results" << std::endl;
+    std::cout << "##############################################################\n\n";
+    run_test_int2float();
 
-    std::cout <<"\nFloat to int conversion results: " << std::endl;
-    print_results(run_test_float2int<float2int_b8, 8>(), 8);
-    print_results(run_test_float2int<float2int_b16, 16>(), 16);
-    print_results(run_test_float2int<float2int_b32, 32>(), 32);
-    print_results(run_test_float2int<float2int_b64, 64>(), 64);
-    print_results(run_test_float2int<float2int_b128, 128>(), 128);
-    print_results(run_test_float2int<float2int_b256, 256>(), 256);
-    print_results(run_test_float2int<float2int_b512, 512>(), 512);
+    std::cout << "##############################################################\n";
+    std::cout <<"Float to int conversion results"<< std::endl;
+    std::cout << "##############################################################\n\n";
+    run_test_float2int();
     return 0;
 }

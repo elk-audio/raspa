@@ -23,6 +23,7 @@
 #include <string>
 #include <cstring>
 #include <cstdlib>
+#include <map>
 
 namespace raspa {
 
@@ -45,38 +46,15 @@ namespace raspa {
     X(110, RASPA_EDEVICE_OPEN, "Raspa: Failed to open driver. ")\
     X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver. ")\
     X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format. ")\
-    X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration.")\
+    X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration. ")\
 
 /**
  * @brief Macro to define the error codes as enums
  */
 #define ERROR_ENUM(ID, NAME, TEXT) NAME = ID,
 
-/**
- * @brief Macro to declare an integer which will hold the corresponding linux
- *        error code for an individual Raspa error code.
- */
-#define ERROR_VAL(ID, NAME, TEXT) int error_val_##NAME = 0;
-
-/**
- * @brief Macro to get the error message text and a text description of its
- *        associated linux error code for each Raspa Error Code.
- */
-#define GET_ERROR_TEXT(ID, NAME, TEXT) case ID:           \
-    if(error_val_##NAME == 0)                             \
-    {                                                     \
-        return TEXT;                                      \
-    }                                                     \
-    error_string = TEXT;                                  \
-    error_string.append(std::strerror(error_val_##NAME)); \
-    return error_string.data();                           \
-
-/**
- * @brief Macro to store the linux error code for a particular Raspa Error code
- *        and return.
- */
-#define SET_ERROR_VAL_AND_RET_CODE(NAME, ERROR_VAL) error_val_##NAME = abs(ERROR_VAL); \
-    return -NAME;
+#define ERROR_TEXT_MAP(ID, NAME, TEXT) _error_text[ID] = TEXT;
+#define ERROR_VAL_MAP(ID, NAME, TEXT) _error_val[ID] = 0;
 
 /**
  * Declarations
@@ -86,11 +64,46 @@ enum
     ERROR_CODES_OP(ERROR_ENUM)
 };
 
-// String which will contain the error message
-std::string error_string;
+class RaspaErrorCode
+{
+public:
+    RaspaErrorCode()
+    {
+        ERROR_CODES_OP(ERROR_TEXT_MAP);
+        ERROR_CODES_OP(ERROR_VAL_MAP);
+    }
 
-// Declare the integers to store the linux error code.
-ERROR_CODES_OP(ERROR_VAL);
+    void set_error_val(int raspa_error_code, int error_val)
+    {
+        _error_val[raspa_error_code] = std::abs(error_val);
+    }
+
+    const char* get_error_text(int raspa_error_code)
+    {
+        int _raspa_error_code = std::abs(raspa_error_code);
+
+        auto error_text = _error_text.find(_raspa_error_code);
+        if(error_text == _error_text.end())
+        {
+            return "Raspa: Unknown error";
+        }
+
+        auto error_val = _error_val[_raspa_error_code];
+        if(error_val == 0)
+        {
+            return error_text->second;
+        }
+
+        _error_string = error_text->second;
+        _error_string.append(std::strerror(error_val));
+        return _error_string.data();
+    }
+
+private:
+    std::map<int, const char*> _error_text;
+    std::map<int, int> _error_val;
+    std::string _error_string;
+};
 
 } // namespace raspa
 

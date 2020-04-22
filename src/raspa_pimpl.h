@@ -261,7 +261,8 @@ public:
         if (res < 0)
         {
             _cleanup();
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_AFFINITY, res);
+            _raspa_error_code.set_error_val(RASPA_ETASK_AFFINITY, res);
+            return -RASPA_ETASK_AFFINITY;
         }
 
         // Create rt thread
@@ -269,7 +270,8 @@ public:
         if (res < 0)
         {
             _cleanup();
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_CREATE, res);
+            _raspa_error_code.set_error_val(RASPA_ETASK_CREATE, res);
+            return -RASPA_ETASK_CREATE;
         }
 
         _task_started = true;
@@ -287,7 +289,8 @@ public:
         res = __cobalt_ioctl(_device_handle, RASPA_PROC_START);
         if(res < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_START, res);
+            _raspa_error_code.set_error_val(RASPA_ETASK_START, res);
+            return -RASPA_ETASK_START;
         }
 
         return RASPA_SUCCESS;
@@ -357,11 +360,7 @@ public:
 
     const char* get_error_msg(int code)
     {
-        switch (abs(code))
-        {
-            ERROR_CODES_OP(GET_ERROR_TEXT);
-        }
-        return "Raspa: Unknown error";
+        return _raspa_error_code.get_error_text(code);
     }
 
     uint32_t get_gate_values()
@@ -413,7 +412,8 @@ public:
         if(res < 0)
         {
             _cleanup();
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_STOP, res);
+            _raspa_error_code.set_error_val(RASPA_ETASK_STOP, res);
+            return -RASPA_ETASK_STOP;
         }
 
         return _cleanup();
@@ -515,7 +515,8 @@ protected:
             break;
 
         default:
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ECODEC_FORMAT, codec_format);
+            _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
+            return -RASPA_ECODEC_FORMAT;
         }
 
         _num_codec_chans = (_num_input_chans > _num_output_chans) ? _num_input_chans : _num_output_chans;
@@ -533,7 +534,8 @@ protected:
         _device_handle = __cobalt_open(RASPA_DEVICE_NAME, O_RDWR);
         if (_device_handle < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EDEVICE_OPEN, _device_handle);
+            _raspa_error_code.set_error_val(RASPA_EDEVICE_OPEN, _device_handle);
+            return -RASPA_EDEVICE_OPEN;
         }
 
         _device_opened = true;
@@ -553,7 +555,8 @@ protected:
 
             if(res < 0)
             {
-                SET_ERROR_VAL_AND_RET_CODE(RASPA_EDEVICE_CLOSE, res);
+                _raspa_error_code.set_error_val(RASPA_EDEVICE_CLOSE, res);
+                return -RASPA_EDEVICE_CLOSE;
             }
         }
 
@@ -572,7 +575,8 @@ protected:
                                                   MAP_SHARED, _device_handle, 0);
         if (_driver_buffer == MAP_FAILED)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_ENOMEM, errno);
+            _raspa_error_code.set_error_val(RASPA_ENOMEM, errno);
+            return -RASPA_ENOMEM;
         }
 
         _mmap_initialized = true;
@@ -591,7 +595,8 @@ protected:
             _mmap_initialized = false;
             if(res < 0)
             {
-                SET_ERROR_VAL_AND_RET_CODE(RASPA_EUNMAP,res);
+                _raspa_error_code.set_error_val(RASPA_EUNMAP,res);
+                return -RASPA_EUNMAP;
             }
         }
 
@@ -629,7 +634,8 @@ protected:
 
         if(res < 0)
         {
-            SET_ERROR_VAL_AND_RET_CODE(RASPA_EUSER_BUFFERS, res);
+            _raspa_error_code.set_error_val(RASPA_EUSER_BUFFERS, res);
+            return -RASPA_EUSER_BUFFERS;
         }
 
         _user_buffers_allocated = true;
@@ -680,7 +686,8 @@ protected:
             _task_started = false;
             if(res < 0)
             {
-                SET_ERROR_VAL_AND_RET_CODE(RASPA_ETASK_CANCEL, res);
+                _raspa_error_code.set_error_val(RASPA_ETASK_CANCEL, res);
+                return -RASPA_ETASK_CANCEL;
             }
         }
 
@@ -773,6 +780,9 @@ protected:
     void* _user_data;
     RaspaProcessCallback _user_callback;
     pthread_t _processing_task;
+
+    // Error code helper class
+    RaspaErrorCode _raspa_error_code;
 };
 
 static void* raspa_intf_task_entry(void* data)

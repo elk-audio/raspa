@@ -56,7 +56,7 @@
  */
 extern int optind;
 
-namespace raspa {
+namespace {
 
 // Delay in milliseconds to wait for audio driver to close and stop its thread.
 constexpr int CLOSE_DELAY_US = 500000;
@@ -78,6 +78,10 @@ constexpr int DRIVER_PARAM_VAL_STR_LEN = 25;
  */
 constexpr int REQUIRED_DRIVER_VERSION_MAJ = 0;
 constexpr int REQUIRED_DRIVER_VERSION_MIN = 2;
+
+}
+
+namespace raspa {
 
 /**
  * @brief Entry point for the real time thread

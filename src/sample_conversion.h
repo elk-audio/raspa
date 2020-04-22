@@ -24,10 +24,13 @@
 
 #include "driver_config.h"
 
-namespace raspa {
-
+namespace
+{
 constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;      // 2**23 - 1
 constexpr float INT24_TO_FLOAT_SCALING_FACTOR = 1.19209304e-07f; // 1.0 / (2**23 - 1)
+}
+
+namespace raspa {
 
 /**
  * @brief Interface class for sample consversion

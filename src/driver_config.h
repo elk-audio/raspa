@@ -35,7 +35,7 @@
  /**
   * @brief Enumeration to denote various codec sample formats
   */
-enum RaspaCodecFormat
+enum class RaspaCodecFormat : int
 {
     INT24_LJ = 1,
     INT24_I2S,

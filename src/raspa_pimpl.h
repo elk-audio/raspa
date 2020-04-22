@@ -114,7 +114,7 @@ public:
                    _num_codec_chans(0),
                    _buffer_size_in_frames(0),
                    _buffer_size_in_samples(0),
-                   _codec_format(INT24_LJ),
+                   _codec_format(RaspaCodecFormat::INT24_LJ),
                    _device_opened(false),
                    _user_buffers_allocated(false),
                    _mmap_initialized(false),
@@ -507,11 +507,11 @@ protected:
 
         switch (codec_format)
         {
-        case INT24_LJ:
-        case INT24_RJ:
-        case INT24_I2S:
-        case INT32_RJ:
-            _codec_format = (RaspaCodecFormat)codec_format;
+        case static_cast<int>(RaspaCodecFormat::INT24_LJ):
+        case static_cast<int>(RaspaCodecFormat::INT24_RJ):
+        case static_cast<int>(RaspaCodecFormat::INT24_I2S):
+        case static_cast<int>(RaspaCodecFormat::INT32_RJ):
+            _codec_format = static_cast<RaspaCodecFormat>(codec_format);
             break;
 
         default:

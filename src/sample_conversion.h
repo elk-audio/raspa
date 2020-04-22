@@ -130,12 +130,12 @@ private:
      */
     int32_t _codec_format_to_int32rj(int32_t sample)
     {
-        if constexpr (codec_format == INT24_LJ)
+        if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
         {
             return sample >> 8;
         }
 
-        else if constexpr (codec_format == INT24_I2S)
+        else if constexpr (codec_format == RaspaCodecFormat::INT24_I2S)
         {
             /**
              * This format does not have the sign info in the first bit.
@@ -145,7 +145,7 @@ private:
             sample = sample << 1;
             return sample >> 8;
         }
-        else if constexpr (codec_format == INT24_RJ)
+        else if constexpr (codec_format == RaspaCodecFormat::INT24_RJ)
         {
             /**
              * This format does not have the sign info in the first 8 bits.
@@ -170,15 +170,15 @@ private:
      */
     int32_t _int32rj_to_codec_format(int32_t sample)
     {
-        if constexpr (codec_format == INT24_LJ)
+        if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
         {
             return sample << 8;
         }
-        else if constexpr (codec_format == INT24_I2S)
+        else if constexpr (codec_format == RaspaCodecFormat::INT24_I2S)
         {
             return (sample << 7) & 0x7FFFFF00;
         }
-        else if constexpr (codec_format == INT24_RJ)
+        else if constexpr (codec_format == RaspaCodecFormat::INT24_RJ)
         {
             return sample & 0x00FFFFFF;
         }
@@ -272,11 +272,11 @@ private:
      */
     int32_t _codec_format_to_int32rj(int32_t sample)
     {
-        if (_codec_format == INT24_LJ)
+        if (_codec_format == RaspaCodecFormat::INT24_LJ)
         {
             return sample >> 8;
         }
-        else if (_codec_format == INT24_I2S)
+        else if (_codec_format == RaspaCodecFormat::INT24_I2S)
         {
             /**
              * This format does not have the sign info in the first bit.
@@ -286,7 +286,7 @@ private:
             sample = sample << 1;
             return sample >> 8;
         }
-        else if (_codec_format == INT24_RJ)
+        else if (_codec_format == RaspaCodecFormat::INT24_RJ)
         {
             // CodecFormat::INT24_RJ
             sample = sample << 8;
@@ -306,15 +306,15 @@ private:
      */
     int32_t _int32rj_to_codec_format(int32_t sample)
     {
-        if (_codec_format == INT24_LJ)
+        if (_codec_format == RaspaCodecFormat::INT24_LJ)
         {
             return sample << 8;
         }
-        else if (_codec_format == INT24_I2S)
+        else if (_codec_format == RaspaCodecFormat::INT24_I2S)
         {
             return (sample << 7) & 0x7FFFFF00;
         }
-        else if(_codec_format == INT24_RJ)
+        else if(_codec_format == RaspaCodecFormat::INT24_RJ)
         {
             return sample & 0x00FFFFFF;
         }
@@ -325,7 +325,7 @@ private:
         }
     }
 
-    int _codec_format;
+    RaspaCodecFormat _codec_format;
     int _buffer_size_in_frames;
     int _num_channels;
 };
@@ -434,19 +434,23 @@ std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_for
 {
     switch (codec_format)
     {
-    case INT24_LJ:
-        return get_sample_converter<INT24_LJ>(buffer_size_in_frames, num_channels);
+    case RaspaCodecFormat::INT24_LJ:
+        return get_sample_converter<RaspaCodecFormat::INT24_LJ>
+                (buffer_size_in_frames, num_channels);
 
-    case INT24_I2S:
-        return get_sample_converter<INT24_I2S>(buffer_size_in_frames, num_channels);
+    case RaspaCodecFormat::INT24_I2S:
+        return get_sample_converter<RaspaCodecFormat::INT24_I2S>
+                (buffer_size_in_frames,num_channels);
 
-    case INT24_RJ:
-        return get_sample_converter<INT24_RJ>(buffer_size_in_frames, num_channels);
+    case RaspaCodecFormat::INT24_RJ:
+        return get_sample_converter<RaspaCodecFormat::INT24_RJ>
+                (buffer_size_in_frames, num_channels);
 
-    case INT32_RJ:
-        return get_sample_converter<INT32_RJ>(buffer_size_in_frames, num_channels);
+    case RaspaCodecFormat::INT32_RJ:
+        return get_sample_converter<RaspaCodecFormat::INT32_RJ>
+                (buffer_size_in_frames, num_channels);
 
-    case NUM_CODEC_FORMATS:
+    case RaspaCodecFormat::NUM_CODEC_FORMATS:
         // never used. Implemented here to suppress warnings
         break;
     }

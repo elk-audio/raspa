@@ -18,73 +18,73 @@
  * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 #include "raspa/raspa.h"
-#include "raspa_intf.h"
+#include "raspa_pimpl.h"
 
-static raspa::RaspaIntf raspa_intf;
+static raspa::RaspaPimpl raspa_pimpl;
 
 const char* raspa_get_error_msg(int code)
 {
-    return raspa_intf.get_error_msg(code);
+    return raspa_pimpl.get_error_msg(code);
 }
 
 int raspa_init()
 {
-    return raspa_intf.init();
+    return raspa_pimpl.init();
 }
 
 int raspa_open(int buffer_size,
                RaspaProcessCallback process_callback,
                void* user_data, unsigned int debug_flags)
 {
-    return raspa_intf.open(buffer_size, process_callback, user_data, debug_flags);
+    return raspa_pimpl.open(buffer_size, process_callback, user_data, debug_flags);
 }
 
 float raspa_get_sampling_rate()
 {
-    return raspa_intf.get_sampling_rate();
+    return raspa_pimpl.get_sampling_rate();
 }
 
 int raspa_get_num_input_channels()
 {
-    return raspa_intf.get_num_input_channels();
+    return raspa_pimpl.get_num_input_channels();
 }
 
 int raspa_get_num_output_channels()
 {
-    return raspa_intf.get_num_output_channels();
+    return raspa_pimpl.get_num_output_channels();
 }
 
 int raspa_start_realtime()
 {
-    return raspa_intf.start_realtime();
+    return raspa_pimpl.start_realtime();
 }
 
 RaspaMicroSec raspa_get_time()
 {
-    return raspa_intf.get_time();
+    return raspa_pimpl.get_time();
 }
 
 int64_t raspa_get_samplecount()
 {
-    return raspa_intf.get_samplecount();
+    return raspa_pimpl.get_samplecount();
 }
 
 RaspaMicroSec raspa_get_output_latency()
 {
-    return raspa_intf.get_output_latency();
+    return raspa_pimpl.get_output_latency();
 }
 
 int raspa_close()
 {
-    return raspa_intf.close();
+    return raspa_pimpl.close();
 }
 
 uint32_t raspa_get_gate_values()
 {
-    return raspa_intf.get_gate_values();
+    return raspa_pimpl.get_gate_values();
 }
 
 void raspa_set_gate_values(uint32_t cv_gates_out)
 {
-    raspa_intf.set_gate_values(cv_gates_out);
+    raspa_pimpl.set_gate_values(cv_gates_out);
 }

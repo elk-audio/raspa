@@ -94,37 +94,37 @@ static void* raspa_intf_task_entry(void* data);
  *        of audio samples. All public functions follow the same api as defined
  *        raspa.h
  */
-class RaspaIntf
+class RaspaPimpl
 {
 public:
-    RaspaIntf() : _driver_buffer(nullptr),
-                  _driver_buffer_audio_in{nullptr, nullptr},
-                  _driver_buffer_audio_out{nullptr, nullptr},
-                  _driver_cv_in{nullptr},
-                  _driver_cv_out{nullptr},
-                  _kernel_buffer_mem_size(0),
-                  _user_audio_in{nullptr},
-                  _user_audio_out{nullptr},
-                  _device_handle(-1),
-                  _interrupts_counter(0),
-                  _buf_idx(0),
-                  _stop_request_flag(false),
-                  _break_on_mode_sw(false),
-                  _sample_rate(0),
-                  _num_codec_chans(0),
-                  _buffer_size_in_frames(0),
-                  _buffer_size_in_samples(0),
-                  _codec_format(INT24_LJ),
-                  _device_opened(false),
-                  _user_buffers_allocated(false),
-                  _mmap_initialized(false),
-                  _task_started(false),
-                  _res_get_audio_info(0),
-                  _user_data(nullptr),
-                  _user_callback(nullptr)
+    RaspaPimpl() : _driver_buffer(nullptr),
+                   _driver_buffer_audio_in{nullptr, nullptr},
+                   _driver_buffer_audio_out{nullptr, nullptr},
+                   _driver_cv_in{nullptr},
+                   _driver_cv_out{nullptr},
+                   _kernel_buffer_mem_size(0),
+                   _user_audio_in{nullptr},
+                   _user_audio_out{nullptr},
+                   _device_handle(-1),
+                   _interrupts_counter(0),
+                   _buf_idx(0),
+                   _stop_request_flag(false),
+                   _break_on_mode_sw(false),
+                   _sample_rate(0),
+                   _num_codec_chans(0),
+                   _buffer_size_in_frames(0),
+                   _buffer_size_in_samples(0),
+                   _codec_format(INT24_LJ),
+                   _device_opened(false),
+                   _user_buffers_allocated(false),
+                   _mmap_initialized(false),
+                   _task_started(false),
+                   _res_get_audio_info(0),
+                   _user_data(nullptr),
+                   _user_callback(nullptr)
     {}
 
-    ~RaspaIntf()
+    ~RaspaPimpl()
     {
         _cleanup();
     }
@@ -777,7 +777,7 @@ protected:
 
 static void* raspa_intf_task_entry(void* data)
 {
-    RaspaIntf* raspa_intf = static_cast<RaspaIntf*>(data);
+    RaspaPimpl* raspa_intf = static_cast<RaspaPimpl*>(data);
     raspa_intf->rt_loop();
 
     // To suppress warnings

@@ -57,7 +57,7 @@ endfunction()
 
 set(RASPALIB_EXTRA_CLION_SOURCES src/driver_config.h
                                  src/raspa_error_codes.h
-                                 src/raspa_intf.h
+                                 src/raspa_pimpl.h
                                  src/sample_conversion.h)
 
 set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)

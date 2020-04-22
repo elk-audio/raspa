@@ -26,61 +26,6 @@
 
 namespace raspa {
 
-/**
- * @brief Macro to create a SampleConverterOptimized instance for various
- *        buffer sizes.
- */
-#define INSTANTIATE_WITH_FIXED_NUM_CHANNELS(codec_format, buffer_size, num_channels)       \
-switch(buffer_size)                                                                        \
-{                                                                                          \
-case 8:                                                                                    \
-    return std::make_unique<SampleConverterOptimized<codec_format, 8, num_channels>>();    \
-    break;                                                                                 \
-case 16:                                                                                   \
-    return std::make_unique<SampleConverterOptimized<codec_format, 16, num_channels>>();   \
-    break;                                                                                 \
-case 32:                                                                                   \
-    return std::make_unique<SampleConverterOptimized<codec_format, 32, num_channels>>();   \
-    break;                                                                                 \
-case 64:                                                                                   \
-    return std::make_unique<SampleConverterOptimized<codec_format, 64, num_channels>>();   \
-    break;                                                                                 \
-case 128:                                                                                  \
-    return std::make_unique<SampleConverterOptimized<codec_format, 128, num_channels>>();  \
-    break;                                                                                 \
-case 256:                                                                                  \
-    return std::make_unique<SampleConverterOptimized<codec_format, 256, num_channels>>();  \
-    break;                                                                                 \
-case 512:                                                                                  \
-    return std::make_unique<SampleConverterOptimized<codec_format, 512, num_channels>>();  \
-    break;                                                                                 \
-case 1024:                                                                                 \
-    return std::make_unique<SampleConverterOptimized<codec_format, 1024, num_channels>>(); \
-    break;                                                                                 \
-default:                                                                                   \
-    break;                                                                                 \
-}                                                                                          \
-
-/**
- * @brief Macro to create a SampleConverterOptimized instance for various
- *        number of channels.
- */
-#define INSTANTIATE_WITH_FIXED_CODEC_FORMAT(codec_format, buffer_size, num_channels) \
-switch(num_channels)                                                                 \
-{                                                                                    \
-case 2:                                                                              \
-    INSTANTIATE_WITH_FIXED_NUM_CHANNELS(codec_format, buffer_size, 2);               \
-    break;                                                                           \
-case 4:                                                                              \
-    INSTANTIATE_WITH_FIXED_NUM_CHANNELS(codec_format, buffer_size, 4);               \
-    break;                                                                           \
-case 8:                                                                              \
-    INSTANTIATE_WITH_FIXED_NUM_CHANNELS(codec_format, buffer_size, 8);               \
-    break;                                                                           \
-default:                                                                             \
-    break;                                                                           \
-}                                                                                    \
-
 constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;      // 2**23 - 1
 constexpr float INT24_TO_FLOAT_SCALING_FACTOR = 1.19209304e-07f; // 1.0 / (2**23 - 1)
 
@@ -385,6 +330,69 @@ private:
     int _num_channels;
 };
 
+template <RaspaCodecFormat codec_format, int num_channels>
+std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
+{
+    switch(buffer_size_in_frames)
+    {
+    case 8:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                8, num_channels>>();
+
+    case 16:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                16, num_channels>>();
+
+    case 32:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                32, num_channels>>();
+
+    case 64:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                64, num_channels>>();
+
+    case 128:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                128, num_channels>>();
+
+    case 256:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                256, num_channels>>();
+
+    case 512:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                512, num_channels>>();
+
+    case 1024:
+        return std::make_unique<SampleConverterOptimized<codec_format,
+                1024, num_channels>>();
+
+    default:
+        return std::make_unique<SampleConverterGeneric>(codec_format,
+                                                        buffer_size_in_frames,
+                                                        num_channels);
+    }
+}
+
+template <RaspaCodecFormat codec_format>
+std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames,
+                                                     int num_channels)
+{
+    switch (num_channels)
+    {
+    case 2:
+        return get_sample_converter<codec_format, 2>(buffer_size_in_frames);
+    case 4:
+        return get_sample_converter<codec_format, 4>(buffer_size_in_frames);
+    case 8:
+        return get_sample_converter<codec_format, 8>(buffer_size_in_frames);
+    default:
+        return std::make_unique<SampleConverterGeneric>(codec_format,
+                                                        buffer_size_in_frames,
+                                                        num_channels);
+    }
+}
+
 /**
  * @brief Get a pointer to an instance of a SampleConvertor object. Depending
  *        on the arguments, either a SampleConverterOptimized or
@@ -407,20 +415,16 @@ std::unique_ptr<SampleConverter> get_sample_converter(RaspaCodecFormat codec_for
     switch (codec_format)
     {
     case INT24_LJ:
-        INSTANTIATE_WITH_FIXED_CODEC_FORMAT(INT24_LJ, buffer_size_in_frames, num_channels);
-        break;
+        return get_sample_converter<INT24_LJ>(buffer_size_in_frames, num_channels);
 
     case INT24_I2S:
-        INSTANTIATE_WITH_FIXED_CODEC_FORMAT(INT24_I2S, buffer_size_in_frames, num_channels);
-        break;
+        return get_sample_converter<INT24_I2S>(buffer_size_in_frames, num_channels);
 
     case INT24_RJ:
-        INSTANTIATE_WITH_FIXED_CODEC_FORMAT(INT24_RJ, buffer_size_in_frames, num_channels);
-        break;
+        return get_sample_converter<INT24_RJ>(buffer_size_in_frames, num_channels);
 
     case INT32_RJ:
-        INSTANTIATE_WITH_FIXED_CODEC_FORMAT(INT32_RJ, buffer_size_in_frames, num_channels);
-        break;
+        return get_sample_converter<INT32_RJ>(buffer_size_in_frames, num_channels);
 
     case NUM_CODEC_FORMATS:
         // never used. Implemented here to suppress warnings

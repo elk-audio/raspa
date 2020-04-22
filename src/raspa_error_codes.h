@@ -53,7 +53,16 @@ namespace raspa {
  */
 #define ERROR_ENUM(ID, NAME, TEXT) NAME = ID,
 
+/**
+ * @brief Macro to populate the std::map _error_text with error codes and its
+ *       corresponding error text.
+ */
 #define ERROR_TEXT_MAP(ID, NAME, TEXT) _error_text[ID] = TEXT;
+
+/**
+ * @brief Macro to populate the std::map _error_val with error codes and its
+ *       corresponding linux error codes.
+ */
 #define ERROR_VAL_MAP(ID, NAME, TEXT) _error_val[ID] = 0;
 
 /**
@@ -64,6 +73,11 @@ enum
     ERROR_CODES_OP(ERROR_ENUM)
 };
 
+/**
+ * Helper class to handle error codes for raspa. Provides functions to store
+ * the linux error code associated with a raspa error code and get error message
+ * text associated with a raspa error code.
+ */
 class RaspaErrorCode
 {
 public:
@@ -73,11 +87,24 @@ public:
         ERROR_CODES_OP(ERROR_VAL_MAP);
     }
 
+    /**
+     * @brief Set the corresponding linux error code associated with a
+     *        raspa error code.
+     * @param raspa_error_code The raspa error code.
+     * @param error_val The linux error code
+     */
     void set_error_val(int raspa_error_code, int error_val)
     {
         _error_val[raspa_error_code] = std::abs(error_val);
     }
 
+    /**
+     * @brief Returns the error text associated with a raspa error code. If
+     *        the associated linux error code is non-zero, then the text also
+     *        contains information about the linux error code.
+     * @param raspa_error_code The raspa error code
+     * @return Error text
+     */
     const char* get_error_text(int raspa_error_code)
     {
         int _raspa_error_code = std::abs(raspa_error_code);
@@ -100,8 +127,13 @@ public:
     }
 
 private:
+    // Map of error codes and error text
     std::map<int, const char*> _error_text;
+
+    // Map of error codes and error values
     std::map<int, int> _error_val;
+
+    // Error text container
     std::string _error_string;
 };
 

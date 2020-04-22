@@ -330,6 +330,16 @@ private:
     int _num_channels;
 };
 
+/**
+ * @brief Instantiate SampleConverterOptimized object using fixed codec_format
+ *        and num channels. Supported buffer sizes are 8 - 1024 and should be
+ *        a power of 2.
+ * @tparam codec_format The RaspaCodecFormat
+ * @tparam num_channels The num of channels
+ * @param buffer_size_in_frames The buffer size in frames.
+ * @return SampleConverterOptimized object if buffer size is supported,
+ * SampleConverterGeneric object otherwise.
+ */
 template <RaspaCodecFormat codec_format, int num_channels>
 std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
 {
@@ -374,6 +384,16 @@ std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
     }
 }
 
+/**
+ * @brief Instantiate SampleConverterOptimized object using fixed codec_format
+ *        but variable buffer size and num channels. Supported num channels are
+ *        2,4,6 and 8.
+ * @tparam codec_format The RaspaCodecFormat
+ * @param num_channels The num of channels
+ * @param buffer_size_in_frames The buffer size in frames.
+ * @return SampleConverterOptimized object if buffer size and num channels is
+ *         supported, SampleConverterGeneric object otherwise.
+ */
 template <RaspaCodecFormat codec_format>
 std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames,
                                                      int num_channels)

@@ -517,19 +517,13 @@ protected:
             return -RASPA_EPARAM;
         }
 
-        switch (codec_format)
+        if(codec_format < static_cast<int>(RaspaCodecFormat::INT24_LJ)
+        || codec_format >= static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS))
         {
-        case static_cast<int>(RaspaCodecFormat::INT24_LJ):
-        case static_cast<int>(RaspaCodecFormat::INT24_RJ):
-        case static_cast<int>(RaspaCodecFormat::INT24_I2S):
-        case static_cast<int>(RaspaCodecFormat::INT32_RJ):
-            _codec_format = static_cast<RaspaCodecFormat>(codec_format);
-            break;
-
-        default:
             _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
             return -RASPA_ECODEC_FORMAT;
         }
+        _codec_format = static_cast<RaspaCodecFormat>(codec_format);
 
         _num_codec_chans = (_num_input_chans > _num_output_chans)
                            ? _num_input_chans : _num_output_chans;

@@ -47,11 +47,14 @@ void run_test_int2float()
     auto var_timing = std::chrono::nanoseconds(0);
 
     int num_chans = raspa::MIN_NUM_CHANNELS;
+    bool iterate_over_channels = true;
 
-    while (raspa::get_next_num_channels(num_chans).first)
+    while (iterate_over_channels)
     {
         int buffer_size = raspa::MIN_BUFFER_SIZE;
-        while (raspa::get_next_buffer_size(buffer_size).first)
+        bool iterate_over_buffers = true;
+
+        while (iterate_over_buffers)
         {
             int buffer_size_in_samples = num_chans * buffer_size;
             fixed_timing = std::chrono::nanoseconds(0);
@@ -113,10 +116,15 @@ void run_test_int2float()
                 free(int_buffers[buf]);
             }
 
-            buffer_size = raspa::get_next_buffer_size(buffer_size).second;
+            auto next_buffer_size = raspa::get_next_buffer_size(buffer_size);
+            iterate_over_buffers = next_buffer_size.first;
+            buffer_size = next_buffer_size.second;
         }
 
-        num_chans = raspa::get_next_num_channels(num_chans).second;
+        auto next_num_chans = raspa::get_next_num_channels(num_chans);
+        iterate_over_channels = next_num_chans.first;
+        num_chans = next_num_chans.second;
+
         std::cout << std::endl;
     }
 }
@@ -132,11 +140,14 @@ void run_test_float2int()
     auto var_timing = std::chrono::nanoseconds(0);
 
     int num_chans = raspa::MIN_NUM_CHANNELS;
+    bool iterate_over_channels = true;
 
-    while (raspa::get_next_num_channels(num_chans).first)
+    while (iterate_over_channels)
     {
         int buffer_size = raspa::MIN_BUFFER_SIZE;
-        while (raspa::get_next_buffer_size(buffer_size).first)
+        bool iterate_over_buffers = true;
+
+        while (iterate_over_buffers)
         {
             int buffer_size_in_samples = num_chans * buffer_size;
             fixed_timing = std::chrono::nanoseconds(0);
@@ -192,10 +203,16 @@ void run_test_float2int()
                 free(float_buffers[buf]);
                 free(int_buffers[buf]);
             }
-            buffer_size = raspa::get_next_buffer_size(buffer_size).second;
+
+            auto next_buffer_size = raspa::get_next_buffer_size(buffer_size);
+            iterate_over_buffers = next_buffer_size.first;
+            buffer_size = next_buffer_size.second;
         }
 
-        num_chans = raspa::get_next_num_channels(num_chans).second;
+        auto next_num_chans = raspa::get_next_num_channels(num_chans);
+        iterate_over_channels = next_num_chans.first;
+        num_chans = next_num_chans.second;
+
         std::cout << std::endl;
     }
 }

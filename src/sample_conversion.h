@@ -312,7 +312,8 @@ std::unique_ptr<BaseSampleConverter> get_sample_converter(RaspaCodecFormat codec
         return std::unique_ptr<BaseSampleConverter>(nullptr);
     }
 
-    return std::make_unique<SampleConverter<static_cast<RaspaCodecFormat>(expected_format), expected_buffer_size, expected_num_chans>>();
+    return std::make_unique<SampleConverter<static_cast<RaspaCodecFormat>
+            (expected_format), expected_buffer_size, expected_num_chans>>();
 }
 
 } // namespace raspa

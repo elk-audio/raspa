@@ -4,14 +4,10 @@
 #include <atomic>
 
 #include "sample_conversion.h"
+#include "sample_converter_generic.h"
 
 constexpr int ITERATIONS   = 500;
 constexpr int SUB_ITERATIONS = 200;
-
-constexpr int MIN_NUM_CHANS = 2;
-constexpr int MAX_NUM_CHANS = 8;
-constexpr int MIN_BUFFER_SIZE = 8;
-constexpr int MAX_BUFFER_SIZE = 1024;
 
 float float_rand(float min, float max)
 {
@@ -50,10 +46,12 @@ void run_test_int2float()
     auto fixed_timing = std::chrono::nanoseconds(0);
     auto var_timing = std::chrono::nanoseconds(0);
 
-    for(int num_chans = MIN_NUM_CHANS; num_chans <= MAX_NUM_CHANS; num_chans += 2)
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+
+    while (raspa::get_next_num_channels(num_chans).first)
     {
-        for (int buffer_size = MIN_BUFFER_SIZE;
-             buffer_size <= MAX_BUFFER_SIZE; buffer_size = buffer_size * 2)
+        int buffer_size = raspa::MIN_BUFFER_SIZE;
+        while (raspa::get_next_buffer_size(buffer_size).first)
         {
             int buffer_size_in_samples = num_chans * buffer_size;
             fixed_timing = std::chrono::nanoseconds(0);
@@ -70,8 +68,8 @@ void run_test_int2float()
                 }
             }
 
-            auto sample_converter = raspa::get_sample_converter(INT24_LJ, buffer_size, num_chans);
-            raspa::SampleConverterGeneric sample_converter_generic(INT24_LJ, buffer_size, num_chans);
+            auto sample_converter = raspa::get_sample_converter(RaspaCodecFormat::INT24_LJ, buffer_size, num_chans);
+            raspa::SampleConverterGeneric sample_converter_generic(RaspaCodecFormat::INT24_LJ, buffer_size, num_chans);
 
             for (int iter = 0; iter < ITERATIONS; ++iter)
             {
@@ -114,8 +112,11 @@ void run_test_int2float()
                 free(float_buffers[buf]);
                 free(int_buffers[buf]);
             }
+
+            buffer_size = raspa::get_next_buffer_size(buffer_size).second;
         }
 
+        num_chans = raspa::get_next_num_channels(num_chans).second;
         std::cout << std::endl;
     }
 }
@@ -130,9 +131,12 @@ void run_test_float2int()
     auto fixed_timing = std::chrono::nanoseconds(0);
     auto var_timing = std::chrono::nanoseconds(0);
 
-    for(int num_chans = MIN_NUM_CHANS; num_chans <= MAX_NUM_CHANS; num_chans += 2)
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+
+    while (raspa::get_next_num_channels(num_chans).first)
     {
-        for(int buffer_size = MIN_BUFFER_SIZE; buffer_size <= MAX_BUFFER_SIZE; buffer_size = buffer_size * 2)
+        int buffer_size = raspa::MIN_BUFFER_SIZE;
+        while (raspa::get_next_buffer_size(buffer_size).first)
         {
             int buffer_size_in_samples = num_chans * buffer_size;
             fixed_timing = std::chrono::nanoseconds(0);
@@ -149,8 +153,8 @@ void run_test_float2int()
                 }
             }
 
-            auto sample_converter = raspa::get_sample_converter(INT24_LJ, buffer_size, num_chans);
-            raspa::SampleConverterGeneric sample_converter_generic(INT24_LJ, buffer_size, num_chans);
+            auto sample_converter = raspa::get_sample_converter(RaspaCodecFormat::INT24_LJ, buffer_size, num_chans);
+            raspa::SampleConverterGeneric sample_converter_generic(RaspaCodecFormat::INT24_LJ, buffer_size, num_chans);
 
             for (int iter = 0; iter < ITERATIONS; ++iter)
             {
@@ -188,8 +192,10 @@ void run_test_float2int()
                 free(float_buffers[buf]);
                 free(int_buffers[buf]);
             }
+            buffer_size = raspa::get_next_buffer_size(buffer_size).second;
         }
 
+        num_chans = raspa::get_next_num_channels(num_chans).second;
         std::cout << std::endl;
     }
 }

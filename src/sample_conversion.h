@@ -24,23 +24,28 @@
 
 #include "driver_config.h"
 
-namespace
-{
+namespace {
 constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;      // 2**23 - 1
 constexpr float INT24_TO_FLOAT_SCALING_FACTOR = 1.19209304e-07f; // 1.0 / (2**23 - 1)
 }
 
 namespace raspa {
 
+constexpr auto DEFAULT_CODEC_FORMAT = RaspaCodecFormat::INT24_LJ;
+constexpr int MIN_NUM_CHANNELS = 2;
+constexpr int MAX_NUM_CHANNELS = 8;
+constexpr int MIN_BUFFER_SIZE = 8;
+constexpr int MAX_BUFFER_SIZE = 1024;
+
 /**
- * @brief Interface class for sample consversion
+ * @brief Interface class for sample conversion
  */
-class SampleConverter
+class BaseSampleConverter
 {
 public:
-    SampleConverter() = default;
+    BaseSampleConverter() = default;
 
-    ~SampleConverter() = default;
+    ~BaseSampleConverter() = default;
 
     /**
      * @brief deinterleaves samples and converts it from the native codec format
@@ -69,12 +74,12 @@ public:
  * @tparam num_channels The number of channels
  */
 template<RaspaCodecFormat codec_format, int buffer_size_in_frames, int num_channels>
-class SampleConverterOptimized : public SampleConverter
+class SampleConverter : public BaseSampleConverter
 {
 public:
-    SampleConverterOptimized() = default;
+    SampleConverter() = default;
 
-    ~SampleConverterOptimized() = default;
+    ~SampleConverter() = default;
 
     /**
      * @brief deinterleaves samples and converts it from the native codec format
@@ -195,276 +200,119 @@ private:
 };
 
 /**
- * @brief Class which performs sample conversion for any generic codec format,
- *        buffer sizes or number of channels. This will not be optimized as the
- *        number of iterations in the inner and outer loops are determined at
- *        run time
+ * @brief Gets the next supported buffer size
+ * @param buffer_size the current buffer size
+ * @return {true, next buffer size} if current buffer size is not equal to the
+ *         maximum allowed buffer size.
+ *         {false, current buffer size} otherwise
  */
-class SampleConverterGeneric : public SampleConverter
+constexpr std::pair<bool, int> get_next_buffer_size(int buffer_size)
 {
-public:
-    /**
-     * @brief Construct a SampleConverterGeneric object
-     * @param codec_format The codec format
-     * @param buffer_size_in_frames The buffer size in frames
-     * @param num_channels The number of channels
-     */
-    SampleConverterGeneric(RaspaCodecFormat codec_format,
-                           int buffer_size_in_frames,
-                           int num_channels) : _codec_format(codec_format),
-                                               _buffer_size_in_frames(
-                                                       buffer_size_in_frames),
-                                               _num_channels(num_channels)
-    {}
-
-    ~SampleConverterGeneric() = default;
-
-    /**
-     * @brief deinterleaves samples and converts it from the native codec format
-     *        to float32
-     * @param dst The destination buffer which holds the float samples
-     * @param src The source buffer which holds samples in native codec format
-     */
-    void codec_format_to_float32n(float* dst, int32_t* src) override
+    if (buffer_size != MAX_BUFFER_SIZE)
     {
-        for (int n = 0; n < _buffer_size_in_frames; n++)
-        {
-            for (int k = 0; k < _num_channels; k++)
-            {
-                int32_t x = *src++;
-                float y = _codec_format_to_int32rj(x) *
-                          INT24_TO_FLOAT_SCALING_FACTOR;
-                dst[(k * _buffer_size_in_frames) + n] = y;
-            }
-        }
+        return {true, buffer_size * 2};
     }
 
-    /**
-     * @brief Interleaves samples and converts it from float32 to the codec's
-     *        native format.
-     * @param dst The destination buffer which holds the samples in native codec
-     *        format
-     * @param src The source buffer which holds samples in float32 format
-     */
-    void float32n_to_codec_format(int32_t* dst, float* src) override
-    {
-        for (int k = 0; k < _num_channels; k++)
-        {
-            for (int n = 0; n < _buffer_size_in_frames; n++)
-            {
-                float x = *src++;
-
-                if (x < -1.0f)
-                {
-                    x = -1.0f;
-                }
-                else if (x > 1.0f)
-                {
-                    x = 1.0f;
-                }
-
-                auto sample = (int32_t) (x * FLOAT_TO_INT24_SCALING_FACTOR);
-                dst[(n * _num_channels) + k] = _int32rj_to_codec_format(sample);
-            }
-        }
-    }
-
-private:
-    /**
-     * @brief Converts samples in native codec format to int32rj
-     * @param sample The sample in native codec format
-     * @return The sample in int32_rj format
-     */
-    int32_t _codec_format_to_int32rj(int32_t sample)
-    {
-        if (_codec_format == RaspaCodecFormat::INT24_LJ)
-        {
-            return sample >> 8;
-        }
-        else if (_codec_format == RaspaCodecFormat::INT24_I2S)
-        {
-            /**
-             * This format does not have the sign info in the first bit.
-             * So we need to manually extend the sign bits to convert it to
-             * int32_rj. Fastest way is to use two shifts.
-             */
-            sample = sample << 1;
-            return sample >> 8;
-        }
-        else if (_codec_format == RaspaCodecFormat::INT24_RJ)
-        {
-            // CodecFormat::INT24_RJ
-            sample = sample << 8;
-            return sample >> 8;
-        }
-        else
-        {
-            // sample is already in int32rj
-            return sample;
-        }
-    }
-
-    /**
-     * @brief Converts sample in int32_rj format to native codec format.
-     * @param sample The sample in int32_rj format
-     * @return The sample in native codec format
-     */
-    int32_t _int32rj_to_codec_format(int32_t sample)
-    {
-        if (_codec_format == RaspaCodecFormat::INT24_LJ)
-        {
-            return sample << 8;
-        }
-        else if (_codec_format == RaspaCodecFormat::INT24_I2S)
-        {
-            return (sample << 7) & 0x7FFFFF00;
-        }
-        else if (_codec_format == RaspaCodecFormat::INT24_RJ)
-        {
-            return sample & 0x00FFFFFF;
-        }
-        else
-        {
-            // its already in codec format
-            return sample;
-        }
-    }
-
-    RaspaCodecFormat _codec_format;
-    int _buffer_size_in_frames;
-    int _num_channels;
-};
-
-/**
- * @brief Instantiate SampleConverterOptimized object using fixed codec_format
- *        and num channels. Supported buffer sizes are 8 - 1024 and should be
- *        a power of 2.
- * @tparam codec_format The RaspaCodecFormat
- * @tparam num_channels The num of channels
- * @param buffer_size_in_frames The buffer size in frames.
- * @return SampleConverterOptimized object if buffer size is supported,
- * SampleConverterGeneric object otherwise.
- */
-template<RaspaCodecFormat codec_format, int num_channels>
-std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames)
-{
-    switch (buffer_size_in_frames)
-    {
-    case 8:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                8, num_channels>>();
-
-    case 16:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                16, num_channels>>();
-
-    case 32:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                32, num_channels>>();
-
-    case 64:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                64, num_channels>>();
-
-    case 128:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                128, num_channels>>();
-
-    case 256:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                256, num_channels>>();
-
-    case 512:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                512, num_channels>>();
-
-    case 1024:
-        return std::make_unique<SampleConverterOptimized<codec_format,
-                1024, num_channels>>();
-
-    default:
-        return std::make_unique<SampleConverterGeneric>(codec_format,
-                                                        buffer_size_in_frames,
-                                                        num_channels);
-    }
+    return {false, buffer_size};
 }
 
 /**
- * @brief Instantiate SampleConverterOptimized object using fixed codec_format
- *        but variable buffer size and num channels. Supported num channels are
- *        2,4,6 and 8.
- * @tparam codec_format The RaspaCodecFormat
- * @param num_channels The num of channels
- * @param buffer_size_in_frames The buffer size in frames.
- * @return SampleConverterOptimized object if buffer size and num channels is
- *         supported, SampleConverterGeneric object otherwise.
+ * @brief Gets the next supported number of channels
+ * @param num_channels the current number of channels
+ * @return {true, next number of channels} if current number of channels is not
+ *         equal to the maximum allowed number of channels.
+ *         {false, current number of channels} otherwise
  */
-template<RaspaCodecFormat codec_format>
-std::unique_ptr<SampleConverter> get_sample_converter(int buffer_size_in_frames,
-                                                      int num_channels)
+constexpr std::pair<bool, int> get_next_num_channels(int num_channels)
 {
-    switch (num_channels)
+    if (num_channels != MAX_NUM_CHANNELS)
     {
-    case 2:
-        return get_sample_converter<codec_format, 2>(buffer_size_in_frames);
-    case 4:
-        return get_sample_converter<codec_format, 4>(buffer_size_in_frames);
-    case 8:
-        return get_sample_converter<codec_format, 8>(buffer_size_in_frames);
-    default:
-        return std::make_unique<SampleConverterGeneric>(codec_format,
-                                                        buffer_size_in_frames,
-                                                        num_channels);
+        return {true, num_channels + 2};
     }
+
+    return {false, num_channels};
 }
 
 /**
- * @brief Get a pointer to an instance of a SampleConvertor object. Depending
- *        on the arguments, either a SampleConverterOptimized or
- *        SampleConverterGeneric object is instantiated.
- *
- *        A SampleConverterOptimized object will be instantiated for the
- *        following argument values:
- *        buffer sizes : 8, 16, 32, 64, 128, 256, 512, 1024
- *        number of channels :  2, 4, 6, 8
- *        Codec formats : INT24_LJ, INT24_I2S, INT24_RJ, INT32_RJ
+ * @brief Gets the next supported codec format
+ * @param codec_format the current codec format
+ * @return {true, next codec format} if current number codec format is not
+ *         equal to the last possible RaspaCodecFormat.
+ *         {false, current codec format} otherwise
+ */
+constexpr std::pair<bool, RaspaCodecFormat>
+get_next_codec_format(RaspaCodecFormat codec_format)
+{
+    if (codec_format != RaspaCodecFormat::INT32_RJ)
+    {
+        return {true,
+                static_cast<RaspaCodecFormat>(static_cast<int>(codec_format) +
+                                              1)};
+    }
+
+    return {false, codec_format};
+}
+
+/**
+ * @brief Get a pointer to an instance of a BaseSampleConvertor object. This
+ *        function deduces the template arguments for SampleConverter and
+ *        instantiates it for the  following argument values:
+ *            - buffer sizes : 8, 16, 32, 64, 128, 256, 512, 1024
+ *            - number of channels :  2, 4, 6, 8
+ *            - Codec formats : INT24_LJ, INT24_I2S, INT24_RJ, INT32_RJ
  * @param codec_format The codec format
  * @param buffer_size_in_frames The buffer size in frames
  * @param num_channels The number of channels.
- * @return A SampleConverterOptimized instance if buffer size and num channels
- *         is supported, SampleConverterGeneric instance otherwise.
+ * @return A SampleConverter instance if buffer size and num channels
+ *         is supported, empty unique_ptr otherwise.
  */
-std::unique_ptr<SampleConverter>
-get_sample_converter(RaspaCodecFormat codec_format,
-                     int buffer_size_in_frames,
-                     int num_channels)
+template<RaspaCodecFormat expected_format = DEFAULT_CODEC_FORMAT,
+         int expected_buffer_size = MIN_BUFFER_SIZE,
+         int expected_num_chans = MIN_NUM_CHANNELS>
+std::unique_ptr<BaseSampleConverter> get_sample_converter(RaspaCodecFormat codec_format,
+                                                          int buffer_size_in_frames,
+                                                          int num_channels)
 {
-    switch (codec_format)
+    if (codec_format != expected_format)
     {
-    case RaspaCodecFormat::INT24_LJ:
-        return get_sample_converter<RaspaCodecFormat::INT24_LJ>
-                (buffer_size_in_frames, num_channels);
+        constexpr auto next_format = get_next_codec_format(expected_format);
+        if constexpr (next_format.first)
+        {
+            return get_sample_converter<next_format.second>(codec_format,
+                    buffer_size_in_frames, num_channels);
+        }
 
-    case RaspaCodecFormat::INT24_I2S:
-        return get_sample_converter<RaspaCodecFormat::INT24_I2S>
-                (buffer_size_in_frames, num_channels);
-
-    case RaspaCodecFormat::INT24_RJ:
-        return get_sample_converter<RaspaCodecFormat::INT24_RJ>
-                (buffer_size_in_frames, num_channels);
-
-    case RaspaCodecFormat::INT32_RJ:
-        return get_sample_converter<RaspaCodecFormat::INT32_RJ>
-                (buffer_size_in_frames, num_channels);
-
-    case RaspaCodecFormat::NUM_CODEC_FORMATS:
-        // never used. Implemented here to suppress warnings
-        break;
+        return std::unique_ptr<BaseSampleConverter>(nullptr);
     }
 
-    return std::make_unique<SampleConverterGeneric>(codec_format,
-                                                    buffer_size_in_frames,
-                                                    num_channels);
+    if (buffer_size_in_frames != expected_buffer_size)
+    {
+        constexpr auto next_buffer_size = get_next_buffer_size(expected_buffer_size);
+        if constexpr (next_buffer_size.first)
+        {
+            return get_sample_converter<expected_format, next_buffer_size.second>
+                    (codec_format, buffer_size_in_frames, num_channels);
+        }
+
+        return std::unique_ptr<BaseSampleConverter>(nullptr);
+    }
+
+    if (num_channels != expected_num_chans)
+    {
+        constexpr auto next_num_chans = get_next_num_channels(expected_num_chans);
+        if constexpr (next_num_chans.first)
+        {
+            return get_sample_converter<expected_format,
+                                        expected_buffer_size,
+                                        next_num_chans.second>(codec_format,
+                                                buffer_size_in_frames,
+                                                num_channels);
+        }
+
+        return std::unique_ptr<BaseSampleConverter>(nullptr);
+    }
+
+    return std::make_unique<SampleConverter<static_cast<RaspaCodecFormat>(expected_format), expected_buffer_size, expected_num_chans>>();
 }
 
 } // namespace raspa

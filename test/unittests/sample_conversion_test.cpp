@@ -1,8 +1,6 @@
 #include <algorithm>
 #include <vector>
 
-#include <iostream>
-
 #include "gtest/gtest.h"
 
 #include "sample_conversion.h"
@@ -71,23 +69,47 @@ protected:
     }
 };
 
+TEST_F(TestSampleConversion, invalid_audio_parameters)
+{
+    RaspaCodecFormat codec_format = RaspaCodecFormat::NUM_CODEC_FORMATS;
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+    int buffer_size = raspa::MIN_BUFFER_SIZE;
+
+    // invalid codec format
+    auto sample_converter = raspa::get_sample_converter(codec_format,
+                                                        buffer_size, num_chans);
+    ASSERT_FALSE(sample_converter);
+
+    // invalid number of channels
+    codec_format = RaspaCodecFormat::INT24_LJ;
+    num_chans = raspa::MAX_NUM_CHANNELS * 2;
+    sample_converter = raspa::get_sample_converter(codec_format,
+                                                   buffer_size, num_chans);
+    ASSERT_FALSE(sample_converter);
+
+    // invalid buffer size of channels
+    num_chans = raspa::MAX_NUM_CHANNELS;
+    buffer_size = raspa::MAX_BUFFER_SIZE * 2;
+    sample_converter = raspa::get_sample_converter(codec_format,
+                                                   buffer_size, num_chans);
+    ASSERT_FALSE(sample_converter);
+}
+
 TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
 {
-
     std::vector<int32_t> int_data;
     std::vector<float> float_data;
     std::vector<float> expected_float_data;
 
-    for (int codec_format = static_cast<int>(RaspaCodecFormat::INT24_LJ);
-         codec_format < static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS);
-         codec_format++)
+    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+    int buffer_size = raspa::MIN_BUFFER_SIZE;
+
+    while (raspa::get_next_codec_format(codec_format).first)
     {
-        for (int num_chans = RASPA_MIN_NUM_CHANNELS;
-             num_chans < RASPA_MAX_NUM_CHANNELS; num_chans++)
+        while (raspa::get_next_num_channels(num_chans).first)
         {
-            for (int buffer_size = RASPA_MIN_BUFFER_SIZE_IN_FRAMES;
-                 buffer_size <
-                 RASPA_MAX_BUFFER_SIZE_IN_FRAMES; buffer_size += 8)
+            while (raspa::get_next_buffer_size(buffer_size).first)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -96,9 +118,10 @@ TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
                 _init_data_ramp_float(expected_float_data,
                                       buffer_size_in_samples);
 
-                auto sample_converter = raspa::get_sample_converter(
-                        static_cast<RaspaCodecFormat>(codec_format),
+                auto sample_converter = raspa::get_sample_converter(codec_format,
                         buffer_size, num_chans);
+
+                ASSERT_TRUE(sample_converter);
 
                 sample_converter->float32n_to_codec_format(int_data.data(),
                                                            expected_float_data.data());
@@ -106,8 +129,12 @@ TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
                                                            int_data.data());
                 assert_buffers_equal(expected_float_data.data(),
                                      float_data.data(), buffer_size_in_samples);
+
+                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
             }
+            num_chans = raspa::get_next_num_channels(num_chans).second;
         }
+        codec_format = raspa::get_next_codec_format(codec_format).second;
     }
 }
 
@@ -117,16 +144,15 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
     std::vector<float> float_data;
     std::vector<int32_t> expected_int_data;
 
-    for (int codec_format = static_cast<int>(RaspaCodecFormat::INT24_LJ);
-         codec_format < static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS);
-         codec_format++)
+    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+    int buffer_size = raspa::MIN_BUFFER_SIZE;
+
+    while (raspa::get_next_codec_format(codec_format).first)
     {
-        for (int num_chans = RASPA_MIN_NUM_CHANNELS;
-             num_chans < RASPA_MAX_NUM_CHANNELS; num_chans++)
+        while (raspa::get_next_num_channels(num_chans).first)
         {
-            for (int buffer_size = RASPA_MIN_BUFFER_SIZE_IN_FRAMES;
-                 buffer_size < RASPA_MAX_BUFFER_SIZE_IN_FRAMES;
-                 buffer_size += 8)
+            while (raspa::get_next_buffer_size(buffer_size).first)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -134,12 +160,13 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
                 float_data.resize(buffer_size_in_samples, 0);
                 _init_data_ramp_int(expected_int_data,
                                     buffer_size_in_samples,
-                                    static_cast<RaspaCodecFormat>(codec_format));
+                                    codec_format);
 
-                auto sample_converter = raspa::get_sample_converter(
-                        static_cast<RaspaCodecFormat>(codec_format),
+                auto sample_converter = raspa::get_sample_converter(codec_format,
                         buffer_size,
                         num_chans);
+
+                ASSERT_TRUE(sample_converter);
 
                 sample_converter->codec_format_to_float32n(float_data.data(),
                                                            expected_int_data.data());
@@ -148,8 +175,11 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
                 assert_buffers_equal_int(expected_int_data.data(),
                                          int_data.data(),
                                          buffer_size_in_samples);
+                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
             }
+            num_chans = raspa::get_next_num_channels(num_chans).second;
         }
+        codec_format = raspa::get_next_codec_format(codec_format).second;
     }
 }
 
@@ -158,9 +188,9 @@ TEST_F(TestSampleConversion, test_clipping)
     std::vector<int32_t> int_data;
     std::vector<float> float_data;
 
-    int buffer_size_in_frames = 512;
-    int num_chans = 8;
-    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
+    int buffer_size_in_frames = raspa::MAX_BUFFER_SIZE;
+    int num_chans = raspa::MAX_NUM_CHANNELS;
+    RaspaCodecFormat codec_format = raspa::DEFAULT_CODEC_FORMAT;
     int buffer_size_in_samples = buffer_size_in_frames * num_chans;
 
     int32_t int24_lj_max_val = (RASPA_INT24_MAX_VALUE << 8);
@@ -190,16 +220,15 @@ TEST_F(TestSampleConversion, test_zero_conversion)
     std::vector<int32_t> int_data;
     std::vector<float> float_data;
 
-    for (int codec_format = static_cast<int>(RaspaCodecFormat::INT24_LJ);
-         codec_format < static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS);
-         codec_format++)
+    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
+    int num_chans = raspa::MIN_NUM_CHANNELS;
+    int buffer_size = raspa::MIN_BUFFER_SIZE;
+
+    while (raspa::get_next_codec_format(codec_format).first)
     {
-        for (int num_chans = RASPA_MIN_NUM_CHANNELS;
-             num_chans < RASPA_MAX_NUM_CHANNELS; num_chans++)
+        while (raspa::get_next_num_channels(num_chans).first)
         {
-            for (int buffer_size = RASPA_MIN_BUFFER_SIZE_IN_FRAMES;
-                 buffer_size < RASPA_MAX_BUFFER_SIZE_IN_FRAMES;
-                 buffer_size += 8)
+            while (raspa::get_next_buffer_size(buffer_size).first)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -207,9 +236,8 @@ TEST_F(TestSampleConversion, test_zero_conversion)
                 int_data.resize(buffer_size_in_samples, 10);
                 float_data.resize(buffer_size_in_samples, 0.0f);
 
-                auto sample_converter = raspa::get_sample_converter(
-                        static_cast<RaspaCodecFormat>(codec_format),
-                        buffer_size, num_chans);
+                auto sample_converter = raspa::get_sample_converter(codec_format,
+                                                        buffer_size, num_chans);
 
                 sample_converter->float32n_to_codec_format(int_data.data(),
                                                            float_data.data());
@@ -223,7 +251,10 @@ TEST_F(TestSampleConversion, test_zero_conversion)
                                                            int_data.data());
                 assert_buffer_value(0.0f, float_data.data(),
                                     buffer_size_in_samples);
+                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
             }
+            num_chans = raspa::get_next_num_channels(num_chans).second;
         }
+        codec_format = raspa::get_next_codec_format(codec_format).second;
     }
 }

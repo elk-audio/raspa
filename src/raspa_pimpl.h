@@ -775,7 +775,7 @@ protected:
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;
     RaspaCodecFormat _codec_format;
-    std::unique_ptr<SampleConverter> _sample_converter;
+    std::unique_ptr<BaseSampleConverter> _sample_converter;
 
     // initialization phases
     bool _device_opened;

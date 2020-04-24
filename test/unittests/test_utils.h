@@ -5,12 +5,6 @@
 #ifndef RASPA_TEST_UTILS_H
 #define RASPA_TEST_UTILS_H
 
-constexpr int RASPA_MIN_BUFFER_SIZE_IN_FRAMES = 8;
-constexpr int RASPA_MAX_BUFFER_SIZE_IN_FRAMES = 2048;
-constexpr int RASPA_MIN_NUM_CHANNELS = 2;
-constexpr int RASPA_MAX_NUM_CHANNELS = 10;
-constexpr int RASPA_MAX_BUFFER_SIZE_IN_SAMPLES = RASPA_MAX_BUFFER_SIZE_IN_FRAMES
-                                                 * RASPA_MAX_NUM_CHANNELS;
 constexpr int RASPA_INT24_MAX_VALUE = 8388607;
 constexpr int RASPA_INT24_MIN_VALUE = -8388607;
 

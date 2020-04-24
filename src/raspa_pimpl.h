@@ -211,6 +211,10 @@ public:
         }
 
         _init_sample_converter();
+        if(!_sample_converter)
+        {
+            return -RASPA_EINVALID_BUFFSIZE;
+        }
 
         if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
         {

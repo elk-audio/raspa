@@ -46,6 +46,7 @@ namespace raspa {
     X(110, RASPA_EDEVICE_OPEN, "Raspa: Failed to open driver. ")\
     X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver. ")\
     X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format. ")\
+    X(113, RASPA_EINVALID_BUFFSIZE, "Raspa: Unsupported buffer size. ")\
     X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration. ")\
 
 /**

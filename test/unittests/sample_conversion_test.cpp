@@ -102,14 +102,19 @@ TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
     std::vector<float> expected_float_data;
 
     RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
-    int num_chans = raspa::MIN_NUM_CHANNELS;
-    int buffer_size = raspa::MIN_BUFFER_SIZE;
+    bool iterate_over_codec_format = true;
 
-    while (raspa::get_next_codec_format(codec_format).first)
+    while (iterate_over_codec_format)
     {
-        while (raspa::get_next_num_channels(num_chans).first)
+        int num_chans = raspa::MIN_NUM_CHANNELS;
+        bool iterate_over_channels = true;
+
+        while (iterate_over_channels)
         {
-            while (raspa::get_next_buffer_size(buffer_size).first)
+            int buffer_size = raspa::MIN_BUFFER_SIZE;
+            bool iterate_over_buffer_size = true;
+
+            while (iterate_over_buffer_size)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -130,11 +135,19 @@ TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
                 assert_buffers_equal(expected_float_data.data(),
                                      float_data.data(), buffer_size_in_samples);
 
-                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
+                auto next_buffer_size = raspa::get_next_buffer_size(buffer_size);
+                iterate_over_buffer_size = next_buffer_size.first;
+                buffer_size = next_buffer_size.second;
             }
-            num_chans = raspa::get_next_num_channels(num_chans).second;
+
+            auto next_num_chans = raspa::get_next_num_channels(num_chans);
+            iterate_over_channels = next_num_chans.first;
+            num_chans = next_num_chans.second;
         }
-        codec_format = raspa::get_next_codec_format(codec_format).second;
+
+        auto next_codec_format = raspa::get_next_codec_format(codec_format);
+        iterate_over_codec_format = next_codec_format.first;
+        codec_format = next_codec_format.second;
     }
 }
 
@@ -145,14 +158,19 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
     std::vector<int32_t> expected_int_data;
 
     RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
-    int num_chans = raspa::MIN_NUM_CHANNELS;
-    int buffer_size = raspa::MIN_BUFFER_SIZE;
+    bool iterate_over_codec_format = true;
 
-    while (raspa::get_next_codec_format(codec_format).first)
+    while (iterate_over_codec_format)
     {
-        while (raspa::get_next_num_channels(num_chans).first)
+        int num_chans = raspa::MIN_NUM_CHANNELS;
+        bool iterate_over_channels = true;
+
+        while (iterate_over_channels)
         {
-            while (raspa::get_next_buffer_size(buffer_size).first)
+            int buffer_size = raspa::MIN_BUFFER_SIZE;
+            bool iterate_over_buffer_size = true;
+
+            while (iterate_over_buffer_size)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -175,11 +193,20 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
                 assert_buffers_equal_int(expected_int_data.data(),
                                          int_data.data(),
                                          buffer_size_in_samples);
-                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
+
+                auto next_buffer_size = raspa::get_next_buffer_size(buffer_size);
+                iterate_over_buffer_size = next_buffer_size.first;
+                buffer_size = next_buffer_size.second;
             }
-            num_chans = raspa::get_next_num_channels(num_chans).second;
+
+            auto next_num_chans = raspa::get_next_num_channels(num_chans);
+            iterate_over_channels = next_num_chans.first;
+            num_chans = next_num_chans.second;
         }
-        codec_format = raspa::get_next_codec_format(codec_format).second;
+
+        auto next_codec_format = raspa::get_next_codec_format(codec_format);
+        iterate_over_codec_format = next_codec_format.first;
+        codec_format = next_codec_format.second;
     }
 }
 
@@ -221,14 +248,19 @@ TEST_F(TestSampleConversion, test_zero_conversion)
     std::vector<float> float_data;
 
     RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
-    int num_chans = raspa::MIN_NUM_CHANNELS;
-    int buffer_size = raspa::MIN_BUFFER_SIZE;
+    bool iterate_over_codec_format = true;
 
-    while (raspa::get_next_codec_format(codec_format).first)
+    while (iterate_over_codec_format)
     {
-        while (raspa::get_next_num_channels(num_chans).first)
+        int num_chans = raspa::MIN_NUM_CHANNELS;
+        bool iterate_over_channels = true;
+
+        while (iterate_over_channels)
         {
-            while (raspa::get_next_buffer_size(buffer_size).first)
+            int buffer_size = raspa::MIN_BUFFER_SIZE;
+            bool iterate_over_buffer_size = true;
+
+            while (iterate_over_buffer_size)
             {
                 int buffer_size_in_samples = buffer_size * num_chans;
 
@@ -251,10 +283,19 @@ TEST_F(TestSampleConversion, test_zero_conversion)
                                                            int_data.data());
                 assert_buffer_value(0.0f, float_data.data(),
                                     buffer_size_in_samples);
-                buffer_size = raspa::get_next_buffer_size(buffer_size).second;
+
+                auto next_buffer_size = raspa::get_next_buffer_size(buffer_size);
+                iterate_over_buffer_size = next_buffer_size.first;
+                buffer_size = next_buffer_size.second;
             }
-            num_chans = raspa::get_next_num_channels(num_chans).second;
+
+            auto next_num_chans = raspa::get_next_num_channels(num_chans);
+            iterate_over_channels = next_num_chans.first;
+            num_chans = next_num_chans.second;
         }
-        codec_format = raspa::get_next_codec_format(codec_format).second;
+
+        auto next_codec_format = raspa::get_next_codec_format(codec_format);
+        iterate_over_codec_format = next_codec_format.first;
+        codec_format = next_codec_format.second;
     }
 }

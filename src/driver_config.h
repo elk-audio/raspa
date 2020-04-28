@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 Modern Ancient Instruments Networked AB, dba Elk
+ * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
  * RASPA is free software: you can redistribute it and/or modify it under the terms
  * of the GNU General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
@@ -14,7 +14,7 @@
 
  /**
  * @brief Configuration macros for RTDM audio driver.
- * @copyright 2017-2019 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 
 #ifndef RASPA_CONFIG_H_H
@@ -31,5 +31,17 @@
 #define RASPA_MODULE_PARAMETERS_PATH "/sys/module/audio_rtdm/parameters"
 
 #define RASPA_PROCESSING_TASK_PRIO  90
+
+ /**
+  * @brief Enumeration to denote various codec sample formats
+  */
+enum class RaspaCodecFormat : int
+{
+    INT24_LJ = 1,
+    INT24_I2S,
+    INT24_RJ,
+    INT32_RJ,
+    NUM_CODEC_FORMATS
+};
 
 #endif //RASPA_CONFIG_H_H

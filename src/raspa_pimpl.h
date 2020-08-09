@@ -45,6 +45,9 @@
 #include "driver_config.h"
 #include "raspa_error_codes.h"
 #include "sample_conversion.h"
+#include "raspa_delay_error_filter.h"
+#include "audio_control_protocol/audio_control_protocol.h"
+#include "audio_control_protocol/audio_packet_helper.h"
 
 #ifdef RASPA_DEBUG_PRINT
 #include <stdio.h>
@@ -59,8 +62,11 @@ extern int optind;
 
 namespace {
 
-// Delay in milliseconds to wait for audio driver to close and stop its thread.
+// Delay in microseconds to wait for audio driver to close and stop its thread.
 constexpr int CLOSE_DELAY_US = 500000;
+
+// Delay in microseconds for a stop request to be processed
+constexpr int STOP_REQUEST_DELAY_US = 10000;
 
 constexpr int THREAD_CREATE_DELAY_US = 10000;
 
@@ -79,6 +85,12 @@ constexpr int DRIVER_PARAM_VAL_STR_LEN = 25;
  */
 constexpr int REQUIRED_DRIVER_VERSION_MAJ = 0;
 constexpr int REQUIRED_DRIVER_VERSION_MIN = 2;
+
+// settling constant for the delay filter
+constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
+
+// Down sampling rate for the delay filter
+constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
 }
 
@@ -107,6 +119,8 @@ public:
                    _driver_buffer_audio_out{nullptr, nullptr},
                    _driver_cv_in{nullptr},
                    _driver_cv_out{nullptr},
+                   _tx_pkt{nullptr, nullptr},
+                   _rx_pkt{nullptr, nullptr},
                    _kernel_buffer_mem_size(0),
                    _user_audio_in{nullptr},
                    _user_audio_out{nullptr},
@@ -128,7 +142,10 @@ public:
                    _task_started(false),
                    _res_get_audio_info(0),
                    _user_data(nullptr),
-                   _user_callback(nullptr)
+                   _user_callback(nullptr),
+                   _platform_type(RaspaPlatformType::NATIVE),
+                   _error_filter_process_count(0),
+                   _audio_packet_seq_num(0)
     {}
 
     ~RaspaPimpl()
@@ -199,21 +216,26 @@ public:
     {
         _buffer_size_in_frames = buffer_size;
 
+        if (_res_get_audio_info < 0)
+        {
+            return _res_get_audio_info;
+        }
+
         auto res = _check_driver_compatibility();
         if (res < 0)
         {
             return res;
         }
 
-        if (_res_get_audio_info < 0)
-        {
-            return _res_get_audio_info;
-        }
-
         _init_sample_converter();
         if(!_sample_converter)
         {
             return -RASPA_EINVALID_BUFFSIZE;
+        }
+
+        if(_platform_type == RaspaPlatformType::SYNC)
+        {
+            _init_delay_error_filter();
         }
 
         if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
@@ -315,47 +337,21 @@ public:
      */
     void rt_loop()
     {
-        while (true)
+        switch(_platform_type)
         {
-            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
-            if (res < 0)
-            {
-                // TODO: think how to handle this. Error here means something *bad*,
-                // so we might want to de-register the driver, cleanup and signal
-                // user someway.
-                break;
-            }
+        case RaspaPlatformType::NATIVE:
+            _rt_loop_native();
+            break;
 
-            _buf_idx = res;
-            if (_break_on_mode_sw && _interrupts_counter > 1)
-            {
-                pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
-                _break_on_mode_sw = 0;
-            }
+        case RaspaPlatformType::SYNC:
+            _rt_loop_sync();
+            break;
 
-            // clear driver buffers if stop is requested
-            if (_stop_request_flag)
-            {
-                _clear_driver_buffers();
-            }
-            else
-            {
-                _sample_converter->codec_format_to_float32n(_user_audio_in,
-                                                            _driver_buffer_audio_in[_buf_idx]);
-                _user_callback(_user_audio_in, _user_audio_out, _user_data);
-                _sample_converter->float32n_to_codec_format(
-                        _driver_buffer_audio_out[_buf_idx], _user_audio_out);
-            }
-
-            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
-#ifdef RASPA_DEBUG_PRINT
-            if (res > 0)
-            {
-                __cobalt_printf("Audio driver: Under-run ! (No of under-runs: %d)\n",res);
-            }
-#endif
-            _interrupts_counter++;
+        case RaspaPlatformType::ASYNC:
+            _rt_loop_async();
+            break;
         }
+
         pthread_exit(nullptr);
     }
 
@@ -381,12 +377,23 @@ public:
 
     uint32_t get_gate_values()
     {
-        return *_driver_cv_in;
+        if(_platform_type == RaspaPlatformType::NATIVE)
+        {
+            return *_driver_cv_in;
+        }
+
+        return get_cv_gate_in_val(_rx_pkt[_buf_idx]);
     }
 
     void set_gate_values(uint32_t cv_gates_out)
     {
-        *_driver_cv_out = cv_gates_out;
+        if(_platform_type == RaspaPlatformType::NATIVE)
+        {
+            *_driver_cv_out = cv_gates_out;
+            return;
+        }
+
+        set_cv_gate_out_val(_tx_pkt[_buf_idx], cv_gates_out);
     }
 
     RaspaMicroSec get_time()
@@ -421,10 +428,15 @@ public:
     int close()
     {
         _stop_request_flag = true;
+
         // Wait sometime for periodic task to send mute command to device
-        usleep(CLOSE_DELAY_US);
+        usleep(STOP_REQUEST_DELAY_US);
 
         auto res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
+
+        // Wait for driver to stop current transfers.
+        usleep(CLOSE_DELAY_US);
+
         if (res < 0)
         {
             _cleanup();
@@ -475,7 +487,7 @@ protected:
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
     int _check_driver_compatibility()
-    {
+    {;
         auto buffer_size = _read_driver_param("audio_buffer_size");
         auto major_version = _read_driver_param("audio_ver_maj");
         auto minor_version = _read_driver_param("audio_ver_min");
@@ -514,9 +526,10 @@ protected:
         _num_input_chans = _read_driver_param("audio_input_channels");
         _num_output_chans = _read_driver_param("audio_output_channels");
         auto codec_format = _read_driver_param("audio_format");
+        auto platform_type = _read_driver_param("platform_type");
 
         if (_sample_rate < 0 || _num_output_chans < 0
-            || _num_output_chans < 0 || codec_format < 0)
+            || _num_output_chans < 0 || codec_format < 0 || platform_type < 0)
         {
             return -RASPA_EPARAM;
         }
@@ -528,6 +541,13 @@ protected:
             return -RASPA_ECODEC_FORMAT;
         }
         _codec_format = static_cast<RaspaCodecFormat>(codec_format);
+
+        if(platform_type < static_cast<int>(RaspaPlatformType::NATIVE)
+        || platform_type > static_cast<int>(RaspaPlatformType::ASYNC))
+        {
+            _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE, platform_type);
+        }
+        _platform_type = static_cast<RaspaPlatformType>(platform_type);
 
         _num_codec_chans = (_num_input_chans > _num_output_chans)
                            ? _num_input_chans : _num_output_chans;
@@ -543,10 +563,24 @@ protected:
     {
         _device_opened = false;
         _device_handle = __cobalt_open(RASPA_DEVICE_NAME, O_RDWR);
+
         if (_device_handle < 0)
         {
-            _raspa_error_code.set_error_val(RASPA_EDEVICE_OPEN, _device_handle);
-            return -RASPA_EDEVICE_OPEN;
+            // check if it is external micro-controller related issues
+            switch (_device_handle)
+            {
+            case RASPA_ERROR_CODE_DEVICE_INACTIVE:
+                return -RASPA_EDEVICE_INACTIVE;
+                break;
+
+            case RASPA_ERROR_CODE_FIRMARE_CHECK:
+                return -RASPA_EDEVICE_FIRMWARE;
+                break;
+
+            default:
+                _raspa_error_code.set_error_val(RASPA_EDEVICE_OPEN, _device_handle);
+                return -RASPA_EDEVICE_OPEN;
+            }
         }
 
         _device_opened = true;
@@ -617,22 +651,69 @@ protected:
 
     /**
      * @brief Initialize the input and output double buffers from the driver.
+     *        The arrangement of the buffers are dependent on the platform
+     *        type as those which use external micro controllers use the
+     *        audio control protocol to communicate info to it. The arrangement
+     *        of the driver buffer is as follows
+     *
+     *        For RaspaPlatformType::NATIVE:
+     *        1. audio buffer in number 0
+     *        2. audio buffer in number 1
+     *        3. audio buffer out number 0
+     *        4. audio buffer out number 1
+     *
+     *        For other platform types
+     *        1. rx audio control packet number 0
+     *        2. audio buffer in number 0
+     *        3. rx audio control packet number 1
+     *        4. audio buffer in number 1
+     *        5. tx audio control packet number 0
+     *        6. audio buffer out number 0
+     *        7. tx audio control packet number 1
+     *        8. audio buffer out number 1
      */
     void _init_driver_buffers()
     {
         _buffer_size_in_samples = _buffer_size_in_frames * _num_codec_chans;
 
-        _driver_buffer_audio_in[0] = _driver_buffer;
-        _driver_buffer_audio_in[1] = _driver_buffer + _buffer_size_in_samples;
+        /* If raspa platform type is not native, then the driver buffers
+         * also include space for audio control packet.
+         */
+        if(_platform_type != RaspaPlatformType::NATIVE)
+        {
+            _rx_pkt[0] = (AudioControlPacket*) _driver_buffer;
+            _driver_buffer_audio_in[0] = _driver_buffer +
+                                        AUDIO_CONTROL_PACKET_SIZE_WORDS;
+            _rx_pkt[1] = (AudioControlPacket*) (_driver_buffer_audio_in[0] +
+                         _buffer_size_in_samples);
+            _driver_buffer_audio_in[1] = ((int32_t*) _rx_pkt[1]) +
+                                          AUDIO_CONTROL_PACKET_SIZE_WORDS;
 
-        _driver_buffer_audio_out[0] =
-                _driver_buffer_audio_in[1] + _buffer_size_in_samples;
-        _driver_buffer_audio_out[1] =
-                _driver_buffer_audio_out[0] + _buffer_size_in_samples;
+            _tx_pkt[0] = (AudioControlPacket*) (_driver_buffer_audio_in[1] +
+                                                _buffer_size_in_samples);
+            _driver_buffer_audio_out[0] = ((int32_t *) _tx_pkt[0]) +
+                                            AUDIO_CONTROL_PACKET_SIZE_WORDS;
+            _tx_pkt[1] = (AudioControlPacket*) (_driver_buffer_audio_out[0] +
+                                                _buffer_size_in_samples);
+            _driver_buffer_audio_out[1] = ((int32_t *) _tx_pkt[1]) +
+                                          AUDIO_CONTROL_PACKET_SIZE_WORDS;
+        }
+        else
+        {
+            _driver_buffer_audio_in[0] = _driver_buffer;
+            _driver_buffer_audio_in[1] = _driver_buffer + _buffer_size_in_samples;
 
-        _driver_cv_out = (uint32_t*) _driver_buffer_audio_out[1] +
-                         _buffer_size_in_samples;
-        _driver_cv_in = _driver_cv_out + 1;
+            _driver_buffer_audio_out[0] =
+                    _driver_buffer_audio_in[1] + _buffer_size_in_samples;
+            _driver_buffer_audio_out[1] =
+                    _driver_buffer_audio_out[0] + _buffer_size_in_samples;
+
+            _driver_cv_out = (uint32_t*) _driver_buffer_audio_out[1] +
+                             _buffer_size_in_samples;
+            _driver_cv_in = _driver_cv_out + 1;
+        }
+
+        _clear_driver_buffers();
     }
 
     /**
@@ -681,11 +762,28 @@ protected:
     }
 
     /**
+     * @brief Initialize delay error filter object
+     */
+    void _init_delay_error_filter()
+    {
+        _delay_error_filter = std::make_unique<RaspaDelayErrorFilter>
+                (DELAY_FILTER_SETTLING_CONSTANT, _sample_rate);
+    }
+
+    /**
      * @brief De init the sample converter instance.
      */
     void _deinit_sample_converter()
     {
         _sample_converter.reset();
+    }
+
+    /**
+     * @brief Deinit delay error filter instance
+     */
+    void _deinit_delay_error_filter()
+    {
+        _delay_error_filter.reset();
     }
 
     /**
@@ -722,6 +820,12 @@ protected:
         res |= _close_device();
 
         _deinit_sample_converter();
+
+        if(_platform_type == RaspaPlatformType::SYNC)
+        {
+            _deinit_delay_error_filter();
+        }
+
         return res;
     }
 
@@ -735,6 +839,14 @@ protected:
             return;
         }
 
+        if(_platform_type != RaspaPlatformType::NATIVE)
+        {
+            clear_audio_control_packet(_rx_pkt[0]);
+            clear_audio_control_packet(_rx_pkt[1]);
+            clear_audio_control_packet(_tx_pkt[0]);
+            clear_audio_control_packet(_tx_pkt[1]);
+        }
+
         for (int i = 0; i < _buffer_size_in_samples; i++)
         {
             _driver_buffer_audio_out[0][i] = 0;
@@ -744,12 +856,215 @@ protected:
         }
     }
 
+    /**
+     * @brief This helper function called in real time context is used for
+     *        RaspaPlatformType::SYNC where raspa uses the delay error filter
+     *        to syncrhonize with the external micro-controller. The filter is
+     *        processed every call but the output is downsampled by
+     *        DELAY_FILTER_DOWNSAMPLE_RATE
+     * @param timing_error_in_frames the timing error in frames
+     * @return if called for DELAY_FILTER_DOWNSAMPLE_RATE times it returns the
+     *         timing error in ns, else it returns 0
+     */
+    int _process_timing_error_with_downsampling(int32_t timing_error_in_frames)
+    {
+        auto timing_error_in_ns =
+           _delay_error_filter->delay_error_filter_tick(timing_error_in_frames);
+
+        // downsampling logic
+        _error_filter_process_count++;
+        if(_error_filter_process_count < DELAY_FILTER_DOWNSAMPLE_RATE)
+        {
+            return 0;
+        }
+
+        _error_filter_process_count = 0;
+        return timing_error_in_ns;
+    }
+
+    /**
+     * @brief Helper function to perform user callback.
+     */
+    void _perform_user_callback()
+    {
+        _sample_converter->codec_format_to_float32n(_user_audio_in,
+                                                    _driver_buffer_audio_in[_buf_idx]);
+        _user_callback(_user_audio_in, _user_audio_out, _user_data);
+        _sample_converter->float32n_to_codec_format(
+                _driver_buffer_audio_out[_buf_idx], _user_audio_out);
+    }
+
+    void _parse_current_rx_pkt()
+    {
+        if(check_audio_packet_for_magic_words(_rx_pkt[_buf_idx]) == 0)
+        {
+            return;
+        }
+
+        auto num_gpio_packets = check_for_gpio_packet(_rx_pkt[_buf_idx]);
+        if(num_gpio_packets > 0)
+        {
+            // TODO : process gpio data
+            return;
+        }
+
+        auto num_midi_bytes = check_for_midi_data(_rx_pkt[_buf_idx]);
+        if (num_midi_bytes > 0)
+        {
+            // TODO : process midi data
+        }
+    }
+
+    void _generate_current_tx_pkt()
+    {
+        if(_stop_request_flag)
+        {
+            prepare_audio_cease_packet(_tx_pkt[_buf_idx], _audio_packet_seq_num);
+            return;
+        }
+
+        create_default_audio_control_packet(_tx_pkt[_buf_idx]);
+
+        // TODO : round robin between gpio and midi data
+    }
+
+    /**
+     * @brief Main real time loop when platform type is native
+     */
+    void _rt_loop_native()
+    {
+        while (true)
+        {
+            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (res < 0)
+            {
+                // TODO: think how to handle this. Error here means something *bad*,
+                // so we might want to de-register the driver, cleanup and signal
+                // user someway.
+                break;
+            }
+
+            _buf_idx = res;
+
+            if (_break_on_mode_sw && _interrupts_counter > 1)
+            {
+                pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
+                _break_on_mode_sw = 0;
+            }
+
+            // clear driver buffers if stop is requested
+            if (_stop_request_flag)
+            {
+                _clear_driver_buffers();
+            }
+            else
+            {
+                _perform_user_callback();
+            }
+
+            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            _interrupts_counter++;
+        }
+    }
+
+    /**
+     * @brief main rt loop when platform type is asynchronous
+     */
+    void _rt_loop_async()
+    {
+        while (true)
+        {
+            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (res < 0)
+            {
+                break;
+            }
+
+            _buf_idx = res;
+
+            if (_break_on_mode_sw && _interrupts_counter > 1)
+            {
+                pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
+                _break_on_mode_sw = 0;
+            }
+
+            _parse_current_rx_pkt();
+            _generate_current_tx_pkt();
+            _perform_user_callback();
+
+            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            _interrupts_counter++;
+        };
+    }
+
+    /**
+     * @brief Main rt loop when platform type is synchronous
+     */
+    void _rt_loop_sync()
+    {
+        int32_t timing_error_in_frames = 0;
+        int32_t timing_error_in_ns = 0;
+
+        // do not perform userspace callback before delay filter is settled
+        while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
+        {
+            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (res < 0)
+            {
+                break;
+            }
+
+            _buf_idx = res;
+
+            timing_error_in_frames = get_timing_error(_rx_pkt[_buf_idx]);
+            timing_error_in_ns =
+                    _process_timing_error_with_downsampling(timing_error_in_frames);
+            _parse_current_rx_pkt();
+            clear_audio_control_packet(_rx_pkt[_buf_idx]);
+
+            _generate_current_tx_pkt();
+
+            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                    &timing_error_in_ns);
+            _interrupts_counter++;
+        }
+
+        // main run time loop
+        while (true)
+        {
+            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (res < 0)
+            {
+                break;
+            }
+
+            _buf_idx = res;
+
+            timing_error_in_frames = get_timing_error(_rx_pkt[_buf_idx]);
+            timing_error_in_ns =
+                _process_timing_error_with_downsampling(timing_error_in_frames);
+
+            _parse_current_rx_pkt();
+            clear_audio_control_packet(_rx_pkt[_buf_idx]);
+
+            _generate_current_tx_pkt();
+
+            _perform_user_callback();
+
+            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                                 &timing_error_in_ns);
+            _interrupts_counter++;
+        }
+    }
+
     // Pointers for driver data
     int32_t* _driver_buffer;
     int32_t* _driver_buffer_audio_in[NUM_BUFFERS];
     int32_t* _driver_buffer_audio_out[NUM_BUFFERS];
     uint32_t* _driver_cv_in;
     uint32_t* _driver_cv_out;
+    AudioControlPacket* _tx_pkt[NUM_BUFFERS];
+    AudioControlPacket* _rx_pkt[NUM_BUFFERS];
     size_t _kernel_buffer_mem_size;
 
     // User buffers for audio
@@ -797,6 +1112,16 @@ protected:
 
     // Error code helper class
     RaspaErrorCode _raspa_error_code;
+
+    // Raspa platform type
+    RaspaPlatformType _platform_type;
+
+    // Delay filter
+    std::unique_ptr<RaspaDelayErrorFilter> _delay_error_filter;
+    int _error_filter_process_count;
+
+    // seq number for audio control packets
+    uint32_t _audio_packet_seq_num;
 };
 
 static void* raspa_pimpl_task_entry(void* data)

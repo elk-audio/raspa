@@ -44,4 +44,24 @@ enum class RaspaCodecFormat : int
     NUM_CODEC_FORMATS
 };
 
+/**
+ * @brief Enumeration to denote the platform type.
+ * NATIVE : Indicates that the host machine directly interfaces with the codec
+ *          and GPIO system.
+ * ASYNC  : Indicates that a secondary controller interfaces with the codec and
+ *          GPIO system and the host machine interacts with it asychronously.
+ * SYNC   : Indicates that a secondary controller interfaces with the codec and
+ *          GPIO system and the host machine interacts with it sychronously.
+ */
+enum class RaspaPlatformType : int
+{
+    NATIVE = 1,
+    SYNC,
+    ASYNC
+};
+
+// Special error codes for micro-controller related issues.
+#define RASPA_ERROR_CODE_DEVICE_INACTIVE   140
+#define RASPA_ERROR_CODE_FIRMARE_CHECK     141
+
 #endif //RASPA_CONFIG_H_H

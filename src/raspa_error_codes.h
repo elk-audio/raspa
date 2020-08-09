@@ -47,6 +47,9 @@ namespace raspa {
     X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver. ")\
     X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format. ")\
     X(113, RASPA_EINVALID_BUFFSIZE, "Raspa: Unsupported buffer size. ")\
+    X(114, RASPA_EPLATFORM_TYPE, "Raspa: Unsupported platform type. ")\
+    X(115, RASPA_EDEVICE_FIRMWARE, "Raspa: Incorrect firmware on external micro-controller. ")\
+    X(116, RASPA_EDEVICE_INACTIVE, "Raspa: External micro-controller not responding ")\
     X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration. ")\
 
 /**

@@ -40,12 +40,15 @@
 
 #include <cstdlib>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 
 #include "raspa/raspa.h"
 #include "driver_config.h"
 #include "raspa_error_codes.h"
 #include "sample_conversion.h"
 #include "raspa_delay_error_filter.h"
+#include "raspa_gpio_com.h"
 #include "audio_control_protocol/audio_control_protocol.h"
 #include "audio_control_protocol/audio_packet_helper.h"
 
@@ -92,6 +95,8 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
+// Sensei socket address
+constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
 }
 
 namespace raspa {
@@ -140,7 +145,6 @@ public:
                    _user_buffers_allocated(false),
                    _mmap_initialized(false),
                    _task_started(false),
-                   _res_get_audio_info(0),
                    _user_data(nullptr),
                    _user_callback(nullptr),
                    _platform_type(RaspaPlatformType::NATIVE),
@@ -202,10 +206,9 @@ public:
         auto res = mlockall(MCL_CURRENT | MCL_FUTURE);
         if (res < 0)
         {
-            return res;
+            _raspa_error_code.set_error_val(RASPA_EMLOCKALL, res);
+            return -RASPA_EMLOCKALL;
         }
-
-        _res_get_audio_info = _get_audio_info_from_driver();
 
         return RASPA_SUCCESS;
     }
@@ -214,28 +217,23 @@ public:
              RaspaProcessCallback process_callback,
              void* user_data, unsigned int debug_flags)
     {
-        _buffer_size_in_frames = buffer_size;
-
-        if (_res_get_audio_info < 0)
-        {
-            return _res_get_audio_info;
-        }
-
-        auto res = _check_driver_compatibility();
-        if (res < 0)
+        auto res = _get_module_param_path();
+        if (res != RASPA_SUCCESS)
         {
             return res;
         }
 
-        _init_sample_converter();
-        if(!_sample_converter)
+        res = _get_audio_info_from_driver();
+        if (res != RASPA_SUCCESS)
         {
-            return -RASPA_EINVALID_BUFFSIZE;
+            return res;
         }
 
-        if(_platform_type == RaspaPlatformType::SYNC)
+        _buffer_size_in_frames = buffer_size;
+        res = _check_driver_compatibility();
+        if (res != RASPA_SUCCESS)
         {
-            _init_delay_error_filter();
+            return res;
         }
 
         if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
@@ -263,6 +261,27 @@ public:
         {
             _cleanup();
             return res;
+        }
+
+        _init_sample_converter();
+        if (!_sample_converter)
+        {
+            return -RASPA_EINVALID_BUFFSIZE;
+        }
+
+        // Delay filter is needed for synchronization
+        if (_platform_type == RaspaPlatformType::SYNC)
+        {
+            _init_delay_error_filter();
+        }
+
+        if (_platform_type != RaspaPlatformType::NATIVE)
+        {
+            auto res = _init_gpio_com();
+            if (res != RASPA_SUCCESS)
+            {
+                return res;
+            }
         }
 
         _user_data = user_data;
@@ -377,7 +396,7 @@ public:
 
     uint32_t get_gate_values()
     {
-        if(_platform_type == RaspaPlatformType::NATIVE)
+        if (_platform_type == RaspaPlatformType::NATIVE)
         {
             return *_driver_cv_in;
         }
@@ -387,7 +406,7 @@ public:
 
     void set_gate_values(uint32_t cv_gates_out)
     {
-        if(_platform_type == RaspaPlatformType::NATIVE)
+        if (_platform_type == RaspaPlatformType::NATIVE)
         {
             *_driver_cv_out = cv_gates_out;
             return;
@@ -451,20 +470,17 @@ public:
 protected:
     /**
      * @brief Read driver parameter
-     * @param param The parameter to read
+     * @param param_name The parameter to read
      * @return integer value of the parameter upon success, linux error code
      *         otherwise.
      */
-    int _read_driver_param(const char* param)
+    int _read_driver_param(const char* param_name)
     {
         int rtdm_file;
-        char path[DRIVER_PARAM_PATH_LEN];
+        std::string full_param_path = _module_param_path + "/" + param_name;
         char value[DRIVER_PARAM_VAL_STR_LEN];
 
-        std::snprintf(path, DRIVER_PARAM_PATH_LEN,
-                      RASPA_MODULE_PARAMETERS_PATH"/%s", param);
-
-        rtdm_file = __cobalt_open(path, O_RDONLY);
+        rtdm_file = __cobalt_open(full_param_path.c_str(), O_RDONLY);
 
         if (rtdm_file < 0)
         {
@@ -517,6 +533,33 @@ protected:
     }
 
     /**
+    * @brief Find the module dir in RASPA_MODULE_PARAM_ROOT_PATH. The module dir
+    *        name will always have the suffix RASPA_MODULE_NAME_SUFFIX.
+    * @return RASPA_SUCCES upon success, -RASPA_EPARAM if module is not found
+    */
+    int _get_module_param_path()
+    {
+        std::string module_root_path(RASPA_MODULE_PARAM_ROOT_PATH);
+        std::string module_name_suffix(RASPA_MODULE_NAME_SUFFIX);
+
+        for (auto &p : std::filesystem::directory_iterator(module_root_path))
+        {
+            const auto& dir_name = p.path().stem().string();
+
+            /* search for suffix RASPA_MODULE_NAME_SUFFIX in dir name. If found
+               then this is the module directory name */
+            auto found = dir_name.find(module_name_suffix);
+            if (found != std::string::npos)
+            {
+                _module_param_path = module_root_path + dir_name + "/parameters";
+                return RASPA_SUCCESS;
+            }
+        }
+
+        return -RASPA_EPARAM;
+    }
+
+    /**
      * @brief Get the various info from the drivers parameter
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
@@ -534,7 +577,7 @@ protected:
             return -RASPA_EPARAM;
         }
 
-        if(codec_format < static_cast<int>(RaspaCodecFormat::INT24_LJ)
+        if (codec_format < static_cast<int>(RaspaCodecFormat::INT24_LJ)
         || codec_format >= static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS))
         {
             _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
@@ -542,7 +585,7 @@ protected:
         }
         _codec_format = static_cast<RaspaCodecFormat>(codec_format);
 
-        if(platform_type < static_cast<int>(RaspaPlatformType::NATIVE)
+        if (platform_type < static_cast<int>(RaspaPlatformType::NATIVE)
         || platform_type > static_cast<int>(RaspaPlatformType::ASYNC))
         {
             _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE, platform_type);
@@ -679,24 +722,30 @@ protected:
         /* If raspa platform type is not native, then the driver buffers
          * also include space for audio control packet.
          */
-        if(_platform_type != RaspaPlatformType::NATIVE)
+        if (_platform_type != RaspaPlatformType::NATIVE)
         {
-            _rx_pkt[0] = (AudioControlPacket*) _driver_buffer;
-            _driver_buffer_audio_in[0] = _driver_buffer +
-                                        AUDIO_CONTROL_PACKET_SIZE_WORDS;
-            _rx_pkt[1] = (AudioControlPacket*) (_driver_buffer_audio_in[0] +
-                         _buffer_size_in_samples);
-            _driver_buffer_audio_in[1] = ((int32_t*) _rx_pkt[1]) +
-                                          AUDIO_CONTROL_PACKET_SIZE_WORDS;
+            _rx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) _driver_buffer;
 
-            _tx_pkt[0] = (AudioControlPacket*) (_driver_buffer_audio_in[1] +
-                                                _buffer_size_in_samples);
-            _driver_buffer_audio_out[0] = ((int32_t *) _tx_pkt[0]) +
-                                            AUDIO_CONTROL_PACKET_SIZE_WORDS;
-            _tx_pkt[1] = (AudioControlPacket*) (_driver_buffer_audio_out[0] +
-                                                _buffer_size_in_samples);
+            _driver_buffer_audio_in[0] = _driver_buffer +
+                                         AUDIO_CTRL_PKT_SIZE_WORDS;
+
+            _rx_pkt[1] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_in[0]
+                                                     + _buffer_size_in_samples);
+
+            _driver_buffer_audio_in[1] = ((int32_t*) _rx_pkt[1]) +
+                                         AUDIO_CTRL_PKT_SIZE_WORDS;
+
+            _tx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_in[1]
+                                                     + _buffer_size_in_samples);
+
+            _driver_buffer_audio_out[0] = ((int32_t *) _tx_pkt[0])
+                                          + AUDIO_CTRL_PKT_SIZE_WORDS;
+
+            _tx_pkt[1] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_out[0]
+                                                     + _buffer_size_in_samples);
+
             _driver_buffer_audio_out[1] = ((int32_t *) _tx_pkt[1]) +
-                                          AUDIO_CONTROL_PACKET_SIZE_WORDS;
+                                          AUDIO_CTRL_PKT_SIZE_WORDS;
         }
         else
         {
@@ -771,6 +820,17 @@ protected:
     }
 
     /**
+     * @brief Init the gpio com object.
+     *
+     * @return int RASPA_SUCCESS upon success, different error code otherwise.
+     */
+    int _init_gpio_com()
+    {
+        _gpio_com = std::make_unique<RaspaGpioCom>(SENSEI_SOCKET, &_raspa_error_code);
+        return _gpio_com->init();
+    }
+
+    /**
      * @brief De init the sample converter instance.
      */
     void _deinit_sample_converter()
@@ -784,6 +844,14 @@ protected:
     void _deinit_delay_error_filter()
     {
         _delay_error_filter.reset();
+    }
+
+    /**
+     * @brief Deinit the gpio com instance
+     */
+    void _deinit_gpio_com()
+    {
+        _gpio_com.reset();
     }
 
     /**
@@ -821,9 +889,10 @@ protected:
 
         _deinit_sample_converter();
 
-        if(_platform_type == RaspaPlatformType::SYNC)
+        if (_platform_type == RaspaPlatformType::SYNC)
         {
             _deinit_delay_error_filter();
+            _deinit_gpio_com();
         }
 
         return res;
@@ -839,12 +908,12 @@ protected:
             return;
         }
 
-        if(_platform_type != RaspaPlatformType::NATIVE)
+        if (_platform_type != RaspaPlatformType::NATIVE)
         {
-            clear_audio_control_packet(_rx_pkt[0]);
-            clear_audio_control_packet(_rx_pkt[1]);
-            clear_audio_control_packet(_tx_pkt[0]);
-            clear_audio_control_packet(_tx_pkt[1]);
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[0]);
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[1]);
+            audio_ctrl::clear_audio_ctrl_pkt(_tx_pkt[0]);
+            audio_ctrl::clear_audio_ctrl_pkt(_tx_pkt[1]);
         }
 
         for (int i = 0; i < _buffer_size_in_samples; i++)
@@ -873,7 +942,7 @@ protected:
 
         // downsampling logic
         _error_filter_process_count++;
-        if(_error_filter_process_count < DELAY_FILTER_DOWNSAMPLE_RATE)
+        if (_error_filter_process_count < DELAY_FILTER_DOWNSAMPLE_RATE)
         {
             return 0;
         }
@@ -887,24 +956,59 @@ protected:
      */
     void _perform_user_callback()
     {
-        _sample_converter->codec_format_to_float32n(_user_audio_in,
-                                                    _driver_buffer_audio_in[_buf_idx]);
+        _sample_converter->codec_format_to_float32n
+                           (_user_audio_in, _driver_buffer_audio_in[_buf_idx]);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
-        _sample_converter->float32n_to_codec_format(
-                _driver_buffer_audio_out[_buf_idx], _user_audio_out);
+        _sample_converter->float32n_to_codec_format
+                          (_driver_buffer_audio_out[_buf_idx], _user_audio_out);
     }
 
+    /**
+     * @brief Prepares current tx audio packet with GPIO data as payload.
+     *        It fetches GPIO data from the gpio com task and inserts it
+     *        into the payload
+     */
+    void _prepare_gpio_cmd_pkt()
+    {
+        int num_blobs = 0;
+        audio_ctrl::GpioDataBlob* data =
+                                  _tx_pkt[_buf_idx]->payload.gpio_data_blob;
+
+        // clear packet first
+        audio_ctrl::create_default_audio_ctrl_pkt(_tx_pkt[_buf_idx]);
+
+        // retreive packets from com task and insert into audio packet payload
+        while (num_blobs < AUDIO_CTRL_PKT_MAX_NUM_GPIO_DATA_BLOBS &&
+             _gpio_com->get_gpio_data_from_nrt(data[num_blobs]))
+        {
+            num_blobs++;
+        }
+
+        audio_ctrl::prepare_gpio_cmd_pkt(_tx_pkt[_buf_idx], num_blobs);
+    }
+
+    /**
+     * @brief Parse the current rx packet and perform the necessary operations
+     */
     void _parse_current_rx_pkt()
     {
-        if(check_audio_packet_for_magic_words(_rx_pkt[_buf_idx]) == 0)
+        if (audio_ctrl::check_audio_pkt_for_magic_words(_rx_pkt[_buf_idx]) == 0)
         {
             return;
         }
 
-        auto num_gpio_packets = check_for_gpio_packet(_rx_pkt[_buf_idx]);
-        if(num_gpio_packets > 0)
+        // Check if packet contains gpio packets. If so, send it to gpio com
+        auto num_blobs = audio_ctrl::check_for_gpio_data(_rx_pkt[_buf_idx]);
+        if (num_blobs > 0)
         {
-            // TODO : process gpio data
+            for (int i = 0; i < num_blobs; i++)
+            {
+                const audio_ctrl::GpioDataBlob& data =
+                                   _rx_pkt[_buf_idx]->payload.gpio_data_blob[i];
+                _gpio_com->send_gpio_data_to_nrt(data);
+            }
+
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
             return;
         }
 
@@ -912,18 +1016,27 @@ protected:
         if (num_midi_bytes > 0)
         {
             // TODO : process midi data
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
         }
     }
 
     void _generate_current_tx_pkt()
     {
-        if(_stop_request_flag)
+        if (_stop_request_flag)
         {
-            prepare_audio_cease_packet(_tx_pkt[_buf_idx], _audio_packet_seq_num);
+            audio_ctrl::prepare_audio_cease_pkt(_tx_pkt[_buf_idx],
+                                                _audio_packet_seq_num);
             return;
         }
 
-        create_default_audio_control_packet(_tx_pkt[_buf_idx]);
+        // if gpio packets need to be sent, then pack payload with them
+        if (_gpio_com->rx_gpio_data_available())
+        {
+            _prepare_gpio_cmd_pkt();
+            return;
+        }
+
+        audio_ctrl::create_default_audio_ctrl_pkt(_tx_pkt[_buf_idx]);
 
         // TODO : round robin between gpio and midi data
     }
@@ -1020,7 +1133,7 @@ protected:
             timing_error_in_ns =
                     _process_timing_error_with_downsampling(timing_error_in_frames);
             _parse_current_rx_pkt();
-            clear_audio_control_packet(_rx_pkt[_buf_idx]);
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
 
             _generate_current_tx_pkt();
 
@@ -1045,7 +1158,7 @@ protected:
                 _process_timing_error_with_downsampling(timing_error_in_frames);
 
             _parse_current_rx_pkt();
-            clear_audio_control_packet(_rx_pkt[_buf_idx]);
+            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
 
             _generate_current_tx_pkt();
 
@@ -1063,8 +1176,8 @@ protected:
     int32_t* _driver_buffer_audio_out[NUM_BUFFERS];
     uint32_t* _driver_cv_in;
     uint32_t* _driver_cv_out;
-    AudioControlPacket* _tx_pkt[NUM_BUFFERS];
-    AudioControlPacket* _rx_pkt[NUM_BUFFERS];
+    audio_ctrl::AudioCtrlPkt* _tx_pkt[NUM_BUFFERS];
+    audio_ctrl::AudioCtrlPkt* _rx_pkt[NUM_BUFFERS];
     size_t _kernel_buffer_mem_size;
 
     // User buffers for audio
@@ -1073,6 +1186,9 @@ protected:
 
     // device handle identifier
     int _device_handle = -1;
+
+    // To store the module paramenter path
+    std::string _module_param_path;
 
     // counter to count the number of interrupts
     int _interrupts_counter;
@@ -1102,9 +1218,6 @@ protected:
     bool _mmap_initialized;
     bool _task_started;
 
-    // result of get_audio_info_from_driver()
-    int _res_get_audio_info;
-
     // rt task data
     void* _user_data;
     RaspaProcessCallback _user_callback;
@@ -1119,6 +1232,9 @@ protected:
     // Delay filter
     std::unique_ptr<RaspaDelayErrorFilter> _delay_error_filter;
     int _error_filter_process_count;
+
+    // Gpio Comm
+    std::unique_ptr<RaspaGpioCom> _gpio_com;
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

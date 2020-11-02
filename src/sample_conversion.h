@@ -25,8 +25,17 @@
 #include "driver_config.h"
 
 namespace {
+/**
+ * scaling factors for 24 bit samples
+ */
 constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;      // 2**23 - 1
 constexpr float INT24_TO_FLOAT_SCALING_FACTOR = 1.19209304e-07f; // 1.0 / (2**23 - 1)
+
+/**
+ * scaling factors for 32 bit samples
+ */
+constexpr float FLOAT_TO_INT32_SCALING_FACTOR = 2147483647.0f;      // 2**31 - 1
+constexpr float INT32_TO_FLOAT_SCALING_FACTOR = 4.656612875e-10f; // 1.0 / (2**31 - 1)
 }
 
 namespace raspa {
@@ -93,10 +102,8 @@ public:
         {
             for (int k = 0; k < num_channels; k++)
             {
-                int32_t x = *src++;
-                float y = _codec_format_to_int32rj(x) *
-                          INT24_TO_FLOAT_SCALING_FACTOR;
-                dst[(k * buffer_size_in_frames) + n] = y;
+                auto sample = _codec_format_to_int32(*src++);
+                dst[(k * buffer_size_in_frames) + n] = _int32_to_float32n(sample);
             }
         }
     }
@@ -125,25 +132,26 @@ public:
                     x = 1.0f;
                 }
 
-                auto sample = (int32_t) (x * FLOAT_TO_INT24_SCALING_FACTOR);
-                dst[(n * num_channels) + k] = _int32rj_to_codec_format(sample);
+                auto sample = _float32n_to_int32(x);
+                dst[(n * num_channels) + k] = _int32_to_codec_format(sample);
             }
         }
     }
 
 private:
     /**
-     * @brief Converts samples in native codec format to int32rj
+     * @brief Converts samples in native codec format to int32. If the sample
+     *        resolution is 24 bit, then the bits are right justified to form
+     *        a 32 bit integer
      * @param sample The sample in native codec format
-     * @return The sample in int32_rj format
+     * @return The sample in int32 format
      */
-    int32_t _codec_format_to_int32rj(int32_t sample)
+    int32_t _codec_format_to_int32(int32_t sample)
     {
         if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
         {
             return sample >> 8;
         }
-
         else if constexpr (codec_format == RaspaCodecFormat::INT24_I2S)
         {
             /**
@@ -167,17 +175,21 @@ private:
         }
         else
         {
-            // samples already in int32_rj format
+            /**
+             * When codec format is either INT24_32 or INT32, the samples are
+             * already 32 bits.
+             */
             return sample;
         }
     }
 
     /**
-     * @brief Converts sample in int32_rj format to native codec format.
-     * @param sample The sample in int32_rj format
+     * @brief Converts sample in int32 format to native codec format. If the
+     *        sample resolution is 24 bits, then the data is left justified.
+     * @param sample The sample in int32 format
      * @return The sample in native codec format
      */
-    int32_t _int32rj_to_codec_format(int32_t sample)
+    int32_t _int32_to_codec_format(int32_t sample)
     {
         if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
         {
@@ -193,8 +205,52 @@ private:
         }
         else
         {
-            // sample already in codec format
+            /**
+             * When codec format is either INT24_32 or INT32, the samples are
+             * already the same as the codec format.
+             */
             return sample;
+        }
+    }
+
+    /**
+     * @brief Converts an integer sample to float by taking into account the
+     *        codec data resolution in bits and normalizing the integer sample
+     *        to that range.
+     *
+     * @param sample The integer sample in the range (2^(codec_res - 1) - 1) to
+     *               (-2^(codec_res - 1))
+     * @return float Sample represented between -1.0 to 1.0
+     */
+    float _int32_to_float32n(int32_t sample)
+    {
+        if constexpr (codec_format == RaspaCodecFormat::INT32)
+        {
+            return  sample * INT32_TO_FLOAT_SCALING_FACTOR;
+        }
+        else
+        {
+            return sample * INT24_TO_FLOAT_SCALING_FACTOR;
+        }
+    }
+
+    /**
+     * @brief Converts a float sample to integer by taking into account the
+     *        codec data resolution in bits.
+     *
+     * @param sample Sample represented between -1.0 to 1.0
+     * @return int32_t The integer sample in the range (2^(codec_res - 1) - 1)
+     *                 to (-2^(codec_res - 1))
+     */
+    int32_t _float32n_to_int32(float sample)
+    {
+        if constexpr (codec_format == RaspaCodecFormat::INT32)
+        {
+            return (int32_t) (sample * FLOAT_TO_INT32_SCALING_FACTOR);
+        }
+        else
+        {
+            return (int32_t) (sample * FLOAT_TO_INT24_SCALING_FACTOR);
         }
     }
 };
@@ -243,7 +299,7 @@ constexpr std::pair<bool, int> get_next_num_channels(int num_channels)
 constexpr std::pair<bool, RaspaCodecFormat>
 get_next_codec_format(RaspaCodecFormat codec_format)
 {
-    if (codec_format != RaspaCodecFormat::INT32_RJ)
+    if (codec_format != RaspaCodecFormat::INT32)
     {
         return {true,
                 static_cast<RaspaCodecFormat>(static_cast<int>(codec_format) +

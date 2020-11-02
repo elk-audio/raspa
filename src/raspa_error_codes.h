@@ -50,7 +50,12 @@ namespace raspa {
     X(114, RASPA_EPLATFORM_TYPE, "Raspa: Unsupported platform type. ")\
     X(115, RASPA_EDEVICE_FIRMWARE, "Raspa: Incorrect firmware on external micro-controller. ")\
     X(116, RASPA_EDEVICE_INACTIVE, "Raspa: External micro-controller not responding ")\
-    X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. Please check driver configuration. ")\
+    X(117, RASPA_EINSOCKET_CREATION, "Raspa: Failed to create input socket for gpio data communication ")\
+    X(118, RASPA_EOUTSOCKET_CREATION, "Raspa: Failed to create output socket for gpio data communication")\
+    X(119, RASPA_EINSOCKET_BIND, "Raspa: Failed to bind input socket to address ")\
+    X(120, RASPA_EINSOCKET_TIMEOUT, "Raspa: Failed to set input socket to address ")\
+    X(121, RASPA_EMLOCKALL, "Raspa: Failed to lock memory needed to prevent page swapping")\
+    X(200, RASPA_EPARAM, "Raspa: Unable to read parameters from driver. The driver might not be loaded correctly. Please check driver configuration.")\
 
 /**
  * @brief Macro to define the error codes as enums

@@ -97,6 +97,12 @@ constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
 // Sensei socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
+
+// Defaults
+constexpr int DEFAULT_NUM_INPUT_CHANS = 2;
+constexpr int DEFAULT_NUM_OUTPUT_CHANS = 2;
+constexpr int DEFAULT_NUM_CODEC_CHANS = 2;
+constexpr int DEFAULT_SAMPLING_RATE = 48000;
 }
 
 namespace raspa {
@@ -134,10 +140,10 @@ public:
                    _buf_idx(0),
                    _stop_request_flag(false),
                    _break_on_mode_sw(false),
-                   _sample_rate(0),
-                   _num_codec_chans(0),
-                   _num_input_chans(0),
-                   _num_output_chans(0),
+                   _sample_rate(DEFAULT_SAMPLING_RATE),
+                   _num_codec_chans(DEFAULT_NUM_CODEC_CHANS),
+                   _num_input_chans(DEFAULT_NUM_INPUT_CHANS),
+                   _num_output_chans(DEFAULT_NUM_OUTPUT_CHANS),
                    _buffer_size_in_frames(0),
                    _buffer_size_in_samples(0),
                    _codec_format(RaspaCodecFormat::INT24_LJ),

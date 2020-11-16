@@ -129,9 +129,10 @@ public:
                    _kernel_buffer_mem_size(0),
                    _user_audio_in{nullptr},
                    _user_audio_out{nullptr},
+                   _user_gate_in(0),
+                   _user_gate_out(0),
                    _device_handle(-1),
                    _interrupts_counter(0),
-                   _buf_idx(0),
                    _stop_request_flag(false),
                    _break_on_mode_sw(false),
                    _sample_rate(0),
@@ -286,7 +287,6 @@ public:
 
         _user_data = user_data;
         _interrupts_counter = 0;
-        _buf_idx = 0;
         _user_callback = process_callback;
 
         return RASPA_SUCCESS;
@@ -396,23 +396,12 @@ public:
 
     uint32_t get_gate_values()
     {
-        if (_platform_type == RaspaPlatformType::NATIVE)
-        {
-            return *_driver_cv_in;
-        }
-
-        return get_cv_gate_in_val(_rx_pkt[_buf_idx]);
+        return _user_gate_in;
     }
 
-    void set_gate_values(uint32_t cv_gates_out)
+    void set_gate_values(uint32_t gate_out_val)
     {
-        if (_platform_type == RaspaPlatformType::NATIVE)
-        {
-            *_driver_cv_out = cv_gates_out;
-            return;
-        }
-
-        set_cv_gate_out_val(_tx_pkt[_buf_idx], cv_gates_out);
+        _user_gate_out = gate_out_val;
     }
 
     RaspaMicroSec get_time()
@@ -953,29 +942,33 @@ protected:
 
     /**
      * @brief Helper function to perform user callback.
+     *
+     * @param input_samples The buffer containing input samples from the codec
+     * @param output_samples The buffer containing samples to be sent to the codec
      */
-    void _perform_user_callback()
+    void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
         _sample_converter->codec_format_to_float32n
-                           (_user_audio_in, _driver_buffer_audio_in[_buf_idx]);
+                           (_user_audio_in, input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
         _sample_converter->float32n_to_codec_format
-                          (_driver_buffer_audio_out[_buf_idx], _user_audio_out);
+                          (output_samples, _user_audio_out);
     }
 
     /**
      * @brief Prepares current tx audio packet with GPIO data as payload.
      *        It fetches GPIO data from the gpio com task and inserts it
      *        into the payload
+     *
+     * @param pkt The packet which is meant to contain the gpio command and data
      */
-    void _prepare_gpio_cmd_pkt()
+    void _prepare_gpio_cmd_pkt(audio_ctrl::AudioCtrlPkt* const pkt)
     {
         int num_blobs = 0;
-        audio_ctrl::GpioDataBlob* data =
-                                  _tx_pkt[_buf_idx]->payload.gpio_data_blob;
+        audio_ctrl::GpioDataBlob* data = pkt->payload.gpio_data_blob;
 
         // clear packet first
-        audio_ctrl::create_default_audio_ctrl_pkt(_tx_pkt[_buf_idx]);
+        audio_ctrl::create_default_audio_ctrl_pkt(pkt);
 
         // retreive packets from com task and insert into audio packet payload
         while (num_blobs < AUDIO_CTRL_PKT_MAX_NUM_GPIO_DATA_BLOBS &&
@@ -984,59 +977,66 @@ protected:
             num_blobs++;
         }
 
-        audio_ctrl::prepare_gpio_cmd_pkt(_tx_pkt[_buf_idx], num_blobs);
+        audio_ctrl::prepare_gpio_cmd_pkt(pkt, num_blobs);
     }
 
     /**
-     * @brief Parse the current rx packet and perform the necessary operations
+     * @brief Parse an rx packet and perform the necessary operations
+     *
+     * @param pkt The rx pkt to be parsed.
      */
-    void _parse_current_rx_pkt()
+    void _parse_rx_pkt(const audio_ctrl::AudioCtrlPkt* const pkt)
     {
-        if (audio_ctrl::check_audio_pkt_for_magic_words(_rx_pkt[_buf_idx]) == 0)
+        if (audio_ctrl::check_audio_pkt_for_magic_words(pkt) == 0)
         {
             return;
         }
 
         // Check if packet contains gpio packets. If so, send it to gpio com
-        auto num_blobs = audio_ctrl::check_for_gpio_data(_rx_pkt[_buf_idx]);
+        auto num_blobs = audio_ctrl::check_for_gpio_data(pkt);
         if (num_blobs > 0)
         {
             for (int i = 0; i < num_blobs; i++)
             {
                 const audio_ctrl::GpioDataBlob& data =
-                                   _rx_pkt[_buf_idx]->payload.gpio_data_blob[i];
+                                   pkt->payload.gpio_data_blob[i];
                 _gpio_com->send_gpio_data_to_nrt(data);
             }
 
-            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
             return;
         }
 
-        auto num_midi_bytes = check_for_midi_data(_rx_pkt[_buf_idx]);
+        auto num_midi_bytes = check_for_midi_data(pkt);
         if (num_midi_bytes > 0)
         {
             // TODO : process midi data
-            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
         }
     }
 
-    void _generate_current_tx_pkt()
+    /**
+     * @brief Generates the next tx pkt. This decides what the next packet
+     *        should be and the data it should contain.
+     *
+     * @param pkt The packet where new tx packet info and data will be
+     *            inserted
+     */
+    void _get_next_tx_pkt_data(audio_ctrl::AudioCtrlPkt* pkt)
     {
         if (_stop_request_flag)
         {
-            audio_ctrl::prepare_audio_cease_pkt(_tx_pkt[_buf_idx],
-                                                _audio_packet_seq_num);
+            audio_ctrl::prepare_audio_cease_pkt(pkt, _audio_packet_seq_num);
             return;
         }
 
         // if gpio packets need to be sent, then pack payload with them
         if (_gpio_com->rx_gpio_data_available())
         {
-            _prepare_gpio_cmd_pkt();
+            _prepare_gpio_cmd_pkt(pkt);
             return;
         }
 
-        audio_ctrl::create_default_audio_ctrl_pkt(_tx_pkt[_buf_idx]);
+        // Create default packet if nothing is there to be sent.
+        audio_ctrl::create_default_audio_ctrl_pkt(pkt);
 
         // TODO : round robin between gpio and midi data
     }
@@ -1048,16 +1048,14 @@ protected:
     {
         while (true)
         {
-            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
-            if (res < 0)
+            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (buf_idx < 0)
             {
                 // TODO: think how to handle this. Error here means something *bad*,
                 // so we might want to de-register the driver, cleanup and signal
                 // user someway.
                 break;
             }
-
-            _buf_idx = res;
 
             if (_break_on_mode_sw && _interrupts_counter > 1)
             {
@@ -1072,10 +1070,13 @@ protected:
             }
             else
             {
-                _perform_user_callback();
+                _user_gate_in = *_driver_cv_in;
+                _perform_user_callback(_driver_buffer_audio_in[buf_idx],
+                                       _driver_buffer_audio_out[buf_idx]);
+                *_driver_cv_out = _user_gate_out;
             }
 
-            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
             _interrupts_counter++;
         }
     }
@@ -1087,13 +1088,11 @@ protected:
     {
         while (true)
         {
-            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
-            if (res < 0)
+            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (buf_idx < 0)
             {
                 break;
             }
-
-            _buf_idx = res;
 
             if (_break_on_mode_sw && _interrupts_counter > 1)
             {
@@ -1101,11 +1100,18 @@ protected:
                 _break_on_mode_sw = 0;
             }
 
-            _parse_current_rx_pkt();
-            _generate_current_tx_pkt();
-            _perform_user_callback();
+            // Store CV gate in
+            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
 
-            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            _parse_rx_pkt(_rx_pkt[buf_idx]);
+            _perform_user_callback(_driver_buffer_audio_in[buf_idx],
+                                   _driver_buffer_audio_out[buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
+
+            // Set gate out info in tx packet
+            audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
+
+            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
             _interrupts_counter++;
         };
     }
@@ -1115,57 +1121,57 @@ protected:
      */
     void _rt_loop_sync()
     {
-        int32_t timing_error_in_frames = 0;
-        int32_t timing_error_in_ns = 0;
-
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
-            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
-            if (res < 0)
+            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (buf_idx < 0)
             {
                 break;
             }
 
-            _buf_idx = res;
+            // Timing error
+            auto timing_error_in_frames =
+                                audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
+            auto timing_error_in_ns =
+                _process_timing_error_with_downsampling(timing_error_in_frames);
 
-            timing_error_in_frames = get_timing_error(_rx_pkt[_buf_idx]);
-            timing_error_in_ns =
-                    _process_timing_error_with_downsampling(timing_error_in_frames);
-            _parse_current_rx_pkt();
-            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
+            _parse_rx_pkt(_rx_pkt[buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
 
-            _generate_current_tx_pkt();
-
-            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
-                    &timing_error_in_ns);
+            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                           &timing_error_in_ns);
             _interrupts_counter++;
         }
 
         // main run time loop
         while (true)
         {
-            auto res = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
-            if (res < 0)
+            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            if (buf_idx < 0)
             {
                 break;
             }
 
-            _buf_idx = res;
-
-            timing_error_in_frames = get_timing_error(_rx_pkt[_buf_idx]);
-            timing_error_in_ns =
+            // Timing error
+            auto timing_error_in_frames =
+                                audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
+            auto timing_error_in_ns =
                 _process_timing_error_with_downsampling(timing_error_in_frames);
 
-            _parse_current_rx_pkt();
-            audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
+            // Store CV gate in
+            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
 
-            _generate_current_tx_pkt();
+            _parse_rx_pkt(_rx_pkt[buf_idx]);
+            _perform_user_callback(_driver_buffer_audio_in[buf_idx],
+                                   _driver_buffer_audio_out[buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
 
-            _perform_user_callback();
+            // Set gate out info in tx packet
+            audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
 
-            res = __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
-                                 &timing_error_in_ns);
+            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                           &timing_error_in_ns);
             _interrupts_counter++;
         }
     }
@@ -1183,6 +1189,8 @@ protected:
     // User buffers for audio
     float* _user_audio_in;
     float* _user_audio_out;
+    uint32_t _user_gate_in;
+    uint32_t _user_gate_out;
 
     // device handle identifier
     int _device_handle = -1;
@@ -1192,9 +1200,6 @@ protected:
 
     // counter to count the number of interrupts
     int _interrupts_counter;
-
-    // flag to denote which buffer is being used
-    int _buf_idx;
 
     // flag to denote that a stop has been requested
     bool _stop_request_flag;

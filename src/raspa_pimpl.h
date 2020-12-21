@@ -27,6 +27,8 @@
 #include <sys/sysinfo.h>
 #include <errno.h>
 #include <sched.h>
+#include <vector>
+#include <fstream>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
@@ -97,6 +99,8 @@ constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
 // Sensei socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
+
+constexpr int NUM_DATA_POINTS = 1000;
 }
 
 namespace raspa {
@@ -288,6 +292,14 @@ public:
         _user_data = user_data;
         _interrupts_counter = 0;
         _user_callback = process_callback;
+
+
+        wakeup_ts.resize(NUM_DATA_POINTS, 0);
+        sleep_period.resize(NUM_DATA_POINTS, 0);
+        timing_error.resize(NUM_DATA_POINTS, 0);
+        timing_correction.resize(NUM_DATA_POINTS, 0);
+
+        data_point = 0;
 
         return RASPA_SUCCESS;
     }
@@ -492,7 +504,7 @@ protected:
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
     int _check_driver_compatibility()
-    {;
+    {
         auto buffer_size = _read_driver_param("audio_buffer_size");
         auto major_version = _read_driver_param("audio_ver_maj");
         auto minor_version = _read_driver_param("audio_ver_min");
@@ -805,7 +817,7 @@ protected:
     void _init_delay_error_filter()
     {
         _delay_error_filter = std::make_unique<RaspaDelayErrorFilter>
-                (DELAY_FILTER_SETTLING_CONSTANT, _sample_rate);
+                                               (DELAY_FILTER_SETTLING_CONSTANT);
     }
 
     /**
@@ -884,6 +896,15 @@ protected:
             _deinit_gpio_com();
         }
 
+        std::ofstream outfile;
+        outfile.open("timing_error.txt");
+        for (int i = 0; i < data_point; i++)
+        {
+            outfile << wakeup_ts[i] << " " << timing_error[i] << " " << timing_correction[i] << std::endl;
+        }
+        printf("finished writing \n");
+        outfile.close();
+
         return res;
     }
 
@@ -917,17 +938,18 @@ protected:
     /**
      * @brief This helper function called in real time context is used for
      *        RaspaPlatformType::SYNC where raspa uses the delay error filter
-     *        to syncrhonize with the external micro-controller. The filter is
+     *        to synchronize with the external micro-controller. The filter is
      *        processed every call but the output is downsampled by
-     *        DELAY_FILTER_DOWNSAMPLE_RATE
-     * @param timing_error_in_frames the timing error in frames
+     *        DELAY_FILTER_DOWNSAMPLE_RATE. The output of the function is the
+     *        amount of correction needed for the sleep period of the rt task.
+     * @param timing_error_ns the timing error in ns
      * @return if called for DELAY_FILTER_DOWNSAMPLE_RATE times it returns the
-     *         timing error in ns, else it returns 0
+     *         correction in ns for the sleep period, else it returns 0
      */
-    int _process_timing_error_with_downsampling(int32_t timing_error_in_frames)
+    int32_t _process_timing_error_with_downsampling(int32_t timing_error_ns)
     {
-        auto timing_error_in_ns =
-           _delay_error_filter->delay_error_filter_tick(timing_error_in_frames);
+        auto correction_in_ns =
+           _delay_error_filter->delay_error_filter_tick(timing_error_ns);
 
         // downsampling logic
         _error_filter_process_count++;
@@ -937,7 +959,7 @@ protected:
         }
 
         _error_filter_process_count = 0;
-        return timing_error_in_ns;
+        return correction_in_ns;
     }
 
     /**
@@ -1121,6 +1143,8 @@ protected:
      */
     void _rt_loop_sync()
     {
+        struct timespec tp;
+
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
@@ -1131,16 +1155,16 @@ protected:
             }
 
             // Timing error
-            auto timing_error_in_frames =
+            auto timing_error_ns =
                                 audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
-            auto timing_error_in_ns =
-                _process_timing_error_with_downsampling(timing_error_in_frames);
+            auto correction_ns =
+                _process_timing_error_with_downsampling(timing_error_ns);
 
             _parse_rx_pkt(_rx_pkt[buf_idx]);
             _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
 
             __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
-                           &timing_error_in_ns);
+                           &correction_ns);
             _interrupts_counter++;
         }
 
@@ -1153,11 +1177,25 @@ protected:
                 break;
             }
 
+            __cobalt_clock_gettime(CLOCK_MONOTONIC, &tp);
+
             // Timing error
-            auto timing_error_in_frames =
+            auto timing_error_ns =
                                 audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
-            auto timing_error_in_ns =
-                _process_timing_error_with_downsampling(timing_error_in_frames);
+            auto correction_ns =
+                _process_timing_error_with_downsampling(timing_error_ns);
+
+            if (data_point < NUM_DATA_POINTS && _interrupts_counter > 5000)
+            {
+                timing_error[data_point] = timing_error_ns;
+                timing_correction[data_point] = correction_ns;
+                wakeup_ts[data_point] = (tp.tv_sec * 1000000000) + tp.tv_nsec;
+                data_point++;
+                if (data_point == NUM_DATA_POINTS)
+                {
+                    __cobalt_printf("Done collecting\n");
+                }
+            }
 
             // Store CV gate in
             _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
@@ -1171,7 +1209,7 @@ protected:
             audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
 
             __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
-                           &timing_error_in_ns);
+                           &correction_ns);
             _interrupts_counter++;
         }
     }
@@ -1243,6 +1281,13 @@ protected:
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;
+
+    std::vector<uint32_t> wakeup_ts;
+    std::vector<uint32_t> sleep_period;
+    std::vector<int32_t> timing_error;
+    std::vector<int32_t> timing_correction;
+
+    int data_point;
 };
 
 static void* raspa_pimpl_task_entry(void* data)

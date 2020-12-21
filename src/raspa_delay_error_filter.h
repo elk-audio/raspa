@@ -35,7 +35,7 @@ public:
      *        expressed in number of periods (buffers).
      * @param sampling_freq The Sampling Freq in Hertz.
      */
-    RaspaDelayErrorFilter(int T60_in_periods, int sampling_freq)
+    RaspaDelayErrorFilter(int T60_in_periods)
     {
         // digital frequency, i.e. one over tau.
         float omega = logf(1000.0f) / ((float) T60_in_periods);
@@ -52,8 +52,6 @@ public:
         // Reset filter state
         _z1 = 0.0f;
         _z2 = 0.0f;
-
-        _sampling_period_nanosec = (1.0e9f / sampling_freq);
     }
 
     /**
@@ -63,16 +61,16 @@ public:
      * @return Filtered relative time in nanoseconds, i.e. in the format expected
      *         by the driver
      */
-    int delay_error_filter_tick(int delay_in_frames)
+    int32_t delay_error_filter_tick(int error_in_ns)
     {
         // filter tick
-        float x = (float) delay_in_frames;
+        float x = (float) error_in_ns;
         float y = _b0 * x + _z1;
 
         _z1 = _b1 * x - _a1 * y + _z2;
         _z2 = _b2 * x - _a2 * y;
 
-        return (int) lrintf(y * _sampling_period_nanosec);
+        return (int) lrintf(y);
     }
 
 private:
@@ -84,8 +82,6 @@ private:
     float _a2;
     float _z1;
     float _z2;
-
-    float _sampling_period_nanosec;
 };
 
 }

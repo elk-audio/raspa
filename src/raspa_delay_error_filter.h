@@ -33,7 +33,6 @@ public:
      *
      * @param T60_in_periods Time constant to reach 99.999% of target value,
      *        expressed in number of periods (buffers).
-     * @param sampling_freq The Sampling Freq in Hertz.
      */
     RaspaDelayErrorFilter(int T60_in_periods)
     {
@@ -56,8 +55,7 @@ public:
 
     /**
      * @brief Update delay error filter
-     * @param delay_in_frames Time error in terms of number of audio frames as
-     *        reported by the audio controller
+     * @param error_in_ns Time error in ns as reported by the micro controller
      * @return Filtered relative time in nanoseconds, i.e. in the format expected
      *         by the driver
      */

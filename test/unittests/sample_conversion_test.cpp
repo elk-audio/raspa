@@ -55,12 +55,15 @@ protected:
             case RaspaCodecFormat::INT24_RJ:
                 value = (value & 0x00FFFFFF);
                 break;
-            case RaspaCodecFormat::INT32_RJ:
+            case RaspaCodecFormat::INT24_32RJ:
                 // represents 24 bit of data in 32bit right justified format
                 value = (value & 0x00FFFFFF) << 8;
 
                 // extend sign
                 value = value >> 8;
+                break;
+            case RaspaCodecFormat::INT32:
+                // No conversion needed
                 break;
             }
             sample = value;

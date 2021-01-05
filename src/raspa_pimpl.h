@@ -27,8 +27,6 @@
 #include <sys/sysinfo.h>
 #include <errno.h>
 #include <sched.h>
-#include <vector>
-#include <fstream>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
@@ -99,8 +97,6 @@ constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
 // Sensei socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
-
-constexpr int NUM_DATA_POINTS = 1000;
 }
 
 namespace raspa {
@@ -292,14 +288,6 @@ public:
         _user_data = user_data;
         _interrupts_counter = 0;
         _user_callback = process_callback;
-
-
-        wakeup_ts.resize(NUM_DATA_POINTS, 0);
-        sleep_period.resize(NUM_DATA_POINTS, 0);
-        timing_error.resize(NUM_DATA_POINTS, 0);
-        timing_correction.resize(NUM_DATA_POINTS, 0);
-
-        data_point = 0;
 
         return RASPA_SUCCESS;
     }
@@ -896,15 +884,6 @@ protected:
             _deinit_gpio_com();
         }
 
-        std::ofstream outfile;
-        outfile.open("timing_error.txt");
-        for (int i = 0; i < data_point; i++)
-        {
-            outfile << wakeup_ts[i] << " " << timing_error[i] << " " << timing_correction[i] << std::endl;
-        }
-        printf("finished writing \n");
-        outfile.close();
-
         return res;
     }
 
@@ -1185,7 +1164,7 @@ protected:
             auto correction_ns =
                 _process_timing_error_with_downsampling(timing_error_ns);
 
-            if (data_point < NUM_DATA_POINTS && _interrupts_counter > 5000)
+            /*if (data_point < NUM_DATA_POINTS && _interrupts_counter > 5000)
             {
                 timing_error[data_point] = timing_error_ns;
                 timing_correction[data_point] = correction_ns;
@@ -1195,7 +1174,7 @@ protected:
                 {
                     __cobalt_printf("Done collecting\n");
                 }
-            }
+            }*/
 
             // Store CV gate in
             _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
@@ -1281,13 +1260,6 @@ protected:
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;
-
-    std::vector<uint32_t> wakeup_ts;
-    std::vector<uint32_t> sleep_period;
-    std::vector<int32_t> timing_error;
-    std::vector<int32_t> timing_correction;
-
-    int data_point;
 };
 
 static void* raspa_pimpl_task_entry(void* data)

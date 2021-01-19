@@ -25,7 +25,6 @@
 
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
-#include <errno.h>
 #include <sched.h>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -40,8 +39,8 @@
 
 #include <cstdlib>
 #include <cstdint>
-#include <filesystem>
 #include <string>
+#include <cerrno>
 
 #include "raspa/raspa.h"
 #include "driver_config.h"
@@ -78,16 +77,6 @@ constexpr int NUM_PAGES_KERNEL_MEM = 20;
 
 //Num of audio buffers.
 constexpr int NUM_BUFFERS = 2;
-
-// Driver parameter definitions
-constexpr int DRIVER_PARAM_PATH_LEN = 100;
-constexpr int DRIVER_PARAM_VAL_STR_LEN = 25;
-
-/**
- * driver versions
- */
-constexpr int REQUIRED_DRIVER_VERSION_MAJ = 0;
-constexpr int REQUIRED_DRIVER_VERSION_MIN = 2;
 
 // settling constant for the delay filter
 constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
@@ -141,14 +130,14 @@ public:
                    _num_output_chans(0),
                    _buffer_size_in_frames(0),
                    _buffer_size_in_samples(0),
-                   _codec_format(RaspaCodecFormat::INT24_LJ),
+                   _codec_format(driver_conf::CodecFormat::INT24_LJ),
                    _device_opened(false),
                    _user_buffers_allocated(false),
                    _mmap_initialized(false),
                    _task_started(false),
                    _user_data(nullptr),
                    _user_callback(nullptr),
-                   _platform_type(RaspaPlatformType::NATIVE),
+                   _platform_type(driver_conf::PlatformType::NATIVE),
                    _error_filter_process_count(0),
                    _audio_packet_seq_num(0)
     {}
@@ -218,24 +207,30 @@ public:
              RaspaProcessCallback process_callback,
              void* user_data, unsigned int debug_flags)
     {
-        auto res = _get_module_param_path();
+        // check if driver version is ok
+        auto ver_check = driver_conf::check_driver_version();
+        if (!ver_check.first)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_VERSION,
+                                            ver_check.second);
+            return -RASPA_EPARAM_VERSION;
+        }
+
+        // get audio info from driver
+        auto res = _get_audio_info_from_driver();
         if (res != RASPA_SUCCESS)
         {
             return res;
         }
 
-        res = _get_audio_info_from_driver();
-        if (res != RASPA_SUCCESS)
+        // set driver buffer size
+        res = driver_conf::set_buffer_size(buffer_size);
+        if (res != 0)
         {
-            return res;
+            _raspa_error_code.set_error_val(RASPA_EPARAM_BUFFER_SIZE, res);
+            return -RASPA_EPARAM_BUFFER_SIZE;
         }
-
         _buffer_size_in_frames = buffer_size;
-        res = _check_driver_compatibility();
-        if (res != RASPA_SUCCESS)
-        {
-            return res;
-        }
 
         if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
         {
@@ -267,16 +262,16 @@ public:
         _init_sample_converter();
         if (!_sample_converter)
         {
-            return -RASPA_EINVALID_BUFFSIZE;
+            return -RASPA_EBUFFER_SIZE;
         }
 
         // Delay filter is needed for synchronization
-        if (_platform_type == RaspaPlatformType::SYNC)
+        if (_platform_type == driver_conf::PlatformType::SYNC)
         {
             _init_delay_error_filter();
         }
 
-        if (_platform_type != RaspaPlatformType::NATIVE)
+        if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
             auto res = _init_gpio_com();
             if (res != RASPA_SUCCESS)
@@ -358,15 +353,15 @@ public:
     {
         switch(_platform_type)
         {
-        case RaspaPlatformType::NATIVE:
+        case driver_conf::PlatformType::NATIVE:
             _rt_loop_native();
             break;
 
-        case RaspaPlatformType::SYNC:
+        case driver_conf::PlatformType::SYNC:
             _rt_loop_sync();
             break;
 
-        case RaspaPlatformType::ASYNC:
+        case driver_conf::PlatformType::ASYNC:
             _rt_loop_async();
             break;
         }
@@ -458,129 +453,68 @@ public:
 
 protected:
     /**
-     * @brief Read driver parameter
-     * @param param_name The parameter to read
-     * @return integer value of the parameter upon success, linux error code
-     *         otherwise.
-     */
-    int _read_driver_param(const char* param_name)
-    {
-        int rtdm_file;
-        std::string full_param_path = _module_param_path + "/" + param_name;
-        char value[DRIVER_PARAM_VAL_STR_LEN];
-
-        rtdm_file = __cobalt_open(full_param_path.c_str(), O_RDONLY);
-
-        if (rtdm_file < 0)
-        {
-            return rtdm_file;
-        }
-
-        if (read(rtdm_file, value, DRIVER_PARAM_VAL_STR_LEN) == -1)
-        {
-            return rtdm_file;
-        }
-
-        __cobalt_close(rtdm_file);
-
-        return atoi(value);
-    }
-
-    /**
-     * @brief Checks compatibility of raspa configuration with that of the
-     *        driver.
-     * @return RASPA_SUCCESS upon success, different raspa error code otherwise
-     */
-    int _check_driver_compatibility()
-    {
-        auto buffer_size = _read_driver_param("audio_buffer_size");
-        auto major_version = _read_driver_param("audio_ver_maj");
-        auto minor_version = _read_driver_param("audio_ver_min");
-
-        if (buffer_size < 0 || major_version < 0 || minor_version < 0)
-        {
-            return -RASPA_EPARAM;
-        }
-
-        if (_buffer_size_in_frames != buffer_size)
-        {
-            return -RASPA_EBUFFSIZE;
-        }
-
-        if (REQUIRED_DRIVER_VERSION_MAJ != major_version)
-        {
-            return -RASPA_EVERSION;
-        }
-
-
-        if (REQUIRED_DRIVER_VERSION_MIN != minor_version)
-        {
-            return -RASPA_EVERSION;
-        }
-
-        return RASPA_SUCCESS;
-    }
-
-    /**
-    * @brief Find the module dir in RASPA_MODULE_PARAM_ROOT_PATH. The module dir
-    *        name will always have the suffix RASPA_MODULE_NAME_SUFFIX.
-    * @return RASPA_SUCCES upon success, -RASPA_EPARAM if module is not found
-    */
-    int _get_module_param_path()
-    {
-        std::string module_root_path(RASPA_MODULE_PARAM_ROOT_PATH);
-        std::string module_name_suffix(RASPA_MODULE_NAME_SUFFIX);
-
-        for (auto &p : std::filesystem::directory_iterator(module_root_path))
-        {
-            const auto& dir_name = p.path().stem().string();
-
-            /* search for suffix RASPA_MODULE_NAME_SUFFIX in dir name. If found
-               then this is the module directory name */
-            auto found = dir_name.find(module_name_suffix);
-            if (found != std::string::npos)
-            {
-                _module_param_path = module_root_path + dir_name + "/parameters";
-                return RASPA_SUCCESS;
-            }
-        }
-
-        return -RASPA_EPARAM;
-    }
-
-    /**
      * @brief Get the various info from the drivers parameter
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
     int _get_audio_info_from_driver()
     {
-        _sample_rate = _read_driver_param("audio_sampling_rate");
-        _num_input_chans = _read_driver_param("audio_input_channels");
-        _num_output_chans = _read_driver_param("audio_output_channels");
-        auto codec_format = _read_driver_param("audio_format");
-        auto platform_type = _read_driver_param("platform_type");
+        _sample_rate = driver_conf::get_sample_rate();
+        _num_input_chans = driver_conf::get_num_input_chan();
+        _num_output_chans = driver_conf::get_num_output_chan();
+        auto codec_format = driver_conf::get_codec_format();
+        auto platform_type = driver_conf::get_platform_type();
 
-        if (_sample_rate < 0 || _num_output_chans < 0
-            || _num_output_chans < 0 || codec_format < 0 || platform_type < 0)
+        // sanity checks on the parameters
+        if (_sample_rate < 0)
         {
-            return -RASPA_EPARAM;
+            _raspa_error_code.set_error_val(RASPA_EPARAM_SAMPLERATE,
+                                            _sample_rate);
+            return -RASPA_EPARAM_SAMPLERATE;
+        }
+        else if (_num_input_chans < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_INPUTCHANS,
+                                            _num_input_chans);
+            return -RASPA_EPARAM_INPUTCHANS;
+        }
+        else if (_num_output_chans < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_OUTPUTCHANS,
+                                            _num_output_chans);
+            return -RASPA_EPARAM_OUTPUTCHANS;
+        }
+        else if (codec_format < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_CODEC_FORMAT,
+                                            codec_format);
+            return -RASPA_EPARAM_CODEC_FORMAT;
+        }
+        else if (platform_type < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_PLATFORM_TYPE,
+                                            platform_type);
+            return -RASPA_EPARAM_PLATFORM_TYPE;
         }
 
-        if (codec_format < static_cast<int>(RaspaCodecFormat::INT24_LJ)
-        || codec_format >= static_cast<int>(RaspaCodecFormat::NUM_CODEC_FORMATS))
+        // set internal codec format
+        if (codec_format < static_cast<int>(driver_conf::CodecFormat::INT24_LJ)
+        || codec_format >= static_cast<int>(driver_conf::CodecFormat::NUM_CODEC_FORMATS))
         {
             _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
             return -RASPA_ECODEC_FORMAT;
         }
-        _codec_format = static_cast<RaspaCodecFormat>(codec_format);
+        _codec_format = static_cast<driver_conf::CodecFormat>(codec_format);
 
-        if (platform_type < static_cast<int>(RaspaPlatformType::NATIVE)
-        || platform_type > static_cast<int>(RaspaPlatformType::ASYNC))
+        // set internal platform type
+        if (platform_type < static_cast<int>(driver_conf::PlatformType::NATIVE)
+        || platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
         {
             _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE, platform_type);
+            return -RASPA_EPARAM_PLATFORM_TYPE;
         }
-        _platform_type = static_cast<RaspaPlatformType>(platform_type);
+        _platform_type = static_cast<driver_conf::PlatformType>(platform_type);
 
+        // set number of codec channels
         _num_codec_chans = (_num_input_chans > _num_output_chans)
                            ? _num_input_chans : _num_output_chans;
 
@@ -594,25 +528,34 @@ protected:
     int _open_device()
     {
         _device_opened = false;
-        _device_handle = __cobalt_open(RASPA_DEVICE_NAME, O_RDWR);
+        _device_handle = __cobalt_open(driver_conf::DEVICE_NAME, O_RDWR);
 
         if (_device_handle < 0)
         {
-            // check if it is external micro-controller related issues
-            switch (_device_handle)
+            if (errno ==
+                static_cast<int>(driver_conf::ErrorCode::INVALID_BUFFER_SIZE))
             {
-            case RASPA_ERROR_CODE_DEVICE_INACTIVE:
-                return -RASPA_EDEVICE_INACTIVE;
-                break;
-
-            case RASPA_ERROR_CODE_FIRMARE_CHECK:
-                return -RASPA_EDEVICE_FIRMWARE;
-                break;
-
-            default:
-                _raspa_error_code.set_error_val(RASPA_EDEVICE_OPEN, _device_handle);
-                return -RASPA_EDEVICE_OPEN;
+                return -RASPA_EBUFFER_SIZE;
             }
+
+            // check if it is external micro-controller related issues
+            if (_platform_type != driver_conf::PlatformType::NATIVE)
+            {
+                if (errno ==
+                    static_cast<int>(driver_conf::ErrorCode::DEVICE_INACTIVE))
+                {
+                    return -RASPA_EDEVICE_INACTIVE;
+                }
+                else if (errno ==
+                    static_cast<int>(driver_conf::ErrorCode::INVALID_FIRMWARE_VER))
+                {
+                    return -RASPA_EDEVICE_FIRMWARE;
+                }
+            }
+
+            // other errors
+            _raspa_error_code.set_error_val(RASPA_EDEVICE_OPEN, _device_handle);
+            return -RASPA_EDEVICE_OPEN;
         }
 
         _device_opened = true;
@@ -688,7 +631,7 @@ protected:
      *        audio control protocol to communicate info to it. The arrangement
      *        of the driver buffer is as follows
      *
-     *        For RaspaPlatformType::NATIVE:
+     *        For PlatformType::NATIVE:
      *        1. audio buffer in number 0
      *        2. audio buffer in number 1
      *        3. audio buffer out number 0
@@ -711,7 +654,7 @@ protected:
         /* If raspa platform type is not native, then the driver buffers
          * also include space for audio control packet.
          */
-        if (_platform_type != RaspaPlatformType::NATIVE)
+        if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
             _rx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) _driver_buffer;
 
@@ -765,6 +708,9 @@ protected:
                                  _buffer_size_in_samples * sizeof(float))
                   || posix_memalign((void**) &_user_audio_out, 16,
                                     _buffer_size_in_samples * sizeof(float));
+
+        std::memset(_user_audio_in, 0, _buffer_size_in_samples * sizeof(float));
+        std::memset(_user_audio_out, 0, _buffer_size_in_samples * sizeof(float));
 
         if (res < 0)
         {
@@ -878,7 +824,7 @@ protected:
 
         _deinit_sample_converter();
 
-        if (_platform_type == RaspaPlatformType::SYNC)
+        if (_platform_type == driver_conf::PlatformType::SYNC)
         {
             _deinit_delay_error_filter();
             _deinit_gpio_com();
@@ -897,7 +843,7 @@ protected:
             return;
         }
 
-        if (_platform_type != RaspaPlatformType::NATIVE)
+        if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
             audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[0]);
             audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[1]);
@@ -916,7 +862,7 @@ protected:
 
     /**
      * @brief This helper function called in real time context is used for
-     *        RaspaPlatformType::SYNC where raspa uses the delay error filter
+     *        PlatformType::SYNC where raspa uses the delay error filter
      *        to synchronize with the external micro-controller. The filter is
      *        processed every call but the output is downsampled by
      *        DELAY_FILTER_DOWNSAMPLE_RATE. The output of the function is the
@@ -1164,18 +1110,6 @@ protected:
             auto correction_ns =
                 _process_timing_error_with_downsampling(timing_error_ns);
 
-            /*if (data_point < NUM_DATA_POINTS && _interrupts_counter > 5000)
-            {
-                timing_error[data_point] = timing_error_ns;
-                timing_correction[data_point] = correction_ns;
-                wakeup_ts[data_point] = (tp.tv_sec * 1000000000) + tp.tv_nsec;
-                data_point++;
-                if (data_point == NUM_DATA_POINTS)
-                {
-                    __cobalt_printf("Done collecting\n");
-                }
-            }*/
-
             // Store CV gate in
             _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
 
@@ -1210,10 +1144,7 @@ protected:
     uint32_t _user_gate_out;
 
     // device handle identifier
-    int _device_handle = -1;
-
-    // To store the module paramenter path
-    std::string _module_param_path;
+    int _device_handle;
 
     // counter to count the number of interrupts
     int _interrupts_counter;
@@ -1231,7 +1162,7 @@ protected:
     int _num_output_chans;
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;
-    RaspaCodecFormat _codec_format;
+    driver_conf::CodecFormat _codec_format;
     std::unique_ptr<BaseSampleConverter> _sample_converter;
 
     // initialization phases
@@ -1249,7 +1180,7 @@ protected:
     RaspaErrorCode _raspa_error_code;
 
     // Raspa platform type
-    RaspaPlatformType _platform_type;
+    driver_conf::PlatformType _platform_type;
 
     // Delay filter
     std::unique_ptr<RaspaDelayErrorFilter> _delay_error_filter;

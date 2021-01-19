@@ -40,7 +40,7 @@ constexpr float INT32_TO_FLOAT_SCALING_FACTOR = 4.656612875e-10f; // 1.0 / (2**3
 
 namespace raspa {
 
-constexpr auto DEFAULT_CODEC_FORMAT = RaspaCodecFormat::INT24_LJ;
+constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
 constexpr int MIN_NUM_CHANNELS = 2;
 constexpr int MAX_NUM_CHANNELS = 8;
 constexpr int MIN_BUFFER_SIZE = 8;
@@ -82,7 +82,8 @@ public:
  * @tparam buffer_size_in_frames The buffer size in frames
  * @tparam num_channels The number of channels
  */
-template<RaspaCodecFormat codec_format, int buffer_size_in_frames, int num_channels>
+template<driver_conf::CodecFormat codec_format,
+        int buffer_size_in_frames, int num_channels>
 class SampleConverter : public BaseSampleConverter
 {
 public:
@@ -148,11 +149,11 @@ private:
      */
     int32_t _codec_format_to_int32(int32_t sample)
     {
-        if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
+        if constexpr (codec_format == driver_conf::CodecFormat::INT24_LJ)
         {
             return sample >> 8;
         }
-        else if constexpr (codec_format == RaspaCodecFormat::INT24_I2S)
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_I2S)
         {
             /**
              * This format does not have the sign info in the first bit.
@@ -162,7 +163,7 @@ private:
             sample = sample << 1;
             return sample >> 8;
         }
-        else if constexpr (codec_format == RaspaCodecFormat::INT24_RJ)
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_RJ)
         {
             /**
              * This format does not have the sign info in the first 8 bits.
@@ -191,15 +192,15 @@ private:
      */
     int32_t _int32_to_codec_format(int32_t sample)
     {
-        if constexpr (codec_format == RaspaCodecFormat::INT24_LJ)
+        if constexpr (codec_format == driver_conf::CodecFormat::INT24_LJ)
         {
             return sample << 8;
         }
-        else if constexpr (codec_format == RaspaCodecFormat::INT24_I2S)
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_I2S)
         {
             return (sample << 7) & 0x7FFFFF00;
         }
-        else if constexpr (codec_format == RaspaCodecFormat::INT24_RJ)
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_RJ)
         {
             return sample & 0x00FFFFFF;
         }
@@ -224,7 +225,7 @@ private:
      */
     float _int32_to_float32n(int32_t sample)
     {
-        if constexpr (codec_format == RaspaCodecFormat::INT32)
+        if constexpr (codec_format == driver_conf::CodecFormat::INT32)
         {
             return  sample * INT32_TO_FLOAT_SCALING_FACTOR;
         }
@@ -244,7 +245,7 @@ private:
      */
     int32_t _float32n_to_int32(float sample)
     {
-        if constexpr (codec_format == RaspaCodecFormat::INT32)
+        if constexpr (codec_format == driver_conf::CodecFormat::INT32)
         {
             return (int32_t) (sample * FLOAT_TO_INT32_SCALING_FACTOR);
         }
@@ -293,16 +294,16 @@ constexpr std::pair<bool, int> get_next_num_channels(int num_channels)
  * @brief Gets the next supported codec format
  * @param codec_format the current codec format
  * @return {true, next codec format} if current number codec format is not
- *         equal to the last possible RaspaCodecFormat.
+ *         equal to the last possible CodecFormat.
  *         {false, current codec format} otherwise
  */
-constexpr std::pair<bool, RaspaCodecFormat>
-get_next_codec_format(RaspaCodecFormat codec_format)
+constexpr std::pair<bool, driver_conf::CodecFormat>
+get_next_codec_format(driver_conf::CodecFormat codec_format)
 {
-    if (codec_format != RaspaCodecFormat::INT32)
+    if (codec_format != driver_conf::CodecFormat::INT32)
     {
         return {true,
-                static_cast<RaspaCodecFormat>(static_cast<int>(codec_format) +
+                static_cast<driver_conf::CodecFormat>(static_cast<int>(codec_format) +
                                               1)};
     }
 
@@ -322,10 +323,10 @@ get_next_codec_format(RaspaCodecFormat codec_format)
  * @return A SampleConverter instance if buffer size and num channels
  *         is supported, empty unique_ptr otherwise.
  */
-template<RaspaCodecFormat expected_format = DEFAULT_CODEC_FORMAT,
+template<driver_conf::CodecFormat expected_format = DEFAULT_CODEC_FORMAT,
          int expected_buffer_size = MIN_BUFFER_SIZE,
          int expected_num_chans = MIN_NUM_CHANNELS>
-std::unique_ptr<BaseSampleConverter> get_sample_converter(RaspaCodecFormat codec_format,
+std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecFormat codec_format,
                                                           int buffer_size_in_frames,
                                                           int num_channels)
 {
@@ -368,7 +369,7 @@ std::unique_ptr<BaseSampleConverter> get_sample_converter(RaspaCodecFormat codec
         return std::unique_ptr<BaseSampleConverter>(nullptr);
     }
 
-    return std::make_unique<SampleConverter<static_cast<RaspaCodecFormat>
+    return std::make_unique<SampleConverter<static_cast<driver_conf::CodecFormat>
             (expected_format), expected_buffer_size, expected_num_chans>>();
 }
 

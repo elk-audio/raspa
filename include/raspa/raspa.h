@@ -28,7 +28,7 @@ extern "C" {
 
 // version definition
 #define RASPA_VERSION_MAJ 0
-#define RASPA_VERSION_MIN 1
+#define RASPA_VERSION_MIN 2
 
 /**
  * @brief Convert error codes to human readable strings.

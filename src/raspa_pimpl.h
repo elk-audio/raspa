@@ -223,14 +223,13 @@ public:
             return res;
         }
 
-        // set driver buffer size
-        res = driver_conf::set_buffer_size(buffer_size);
-        if (res != 0)
-        {
-            _raspa_error_code.set_error_val(RASPA_EPARAM_BUFFER_SIZE, res);
-            return -RASPA_EPARAM_BUFFER_SIZE;
-        }
+        // check driver buffer size
         _buffer_size_in_frames = buffer_size;
+        res = _validate_buffer_size();
+        if (res != RASPA_SUCCESS)
+        {
+            return res;
+        }
 
         if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
         {
@@ -262,7 +261,7 @@ public:
         _init_sample_converter();
         if (!_sample_converter)
         {
-            return -RASPA_EBUFFER_SIZE;
+            return -RASPA_EBUFFER_SIZE_SC;
         }
 
         // Delay filter is needed for synchronization
@@ -522,6 +521,30 @@ protected:
     }
 
     /**
+     * @brief Checks if a buffer size specified matches with that of the driver.
+     *
+     * @return int RASPA_SUCCESS upon success, negative raspa error code
+     *         otherwise
+     */
+    int _validate_buffer_size()
+    {
+        auto driver_buffer_size = driver_conf::get_buffer_size();
+        if (driver_buffer_size < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_BUFFER_SIZE,
+                                            driver_buffer_size);
+            return -RASPA_EPARAM_BUFFER_SIZE;
+        }
+
+        if (driver_buffer_size != _buffer_size_in_frames)
+        {
+            return -RASPA_EBUFFER_SIZE_MISMATCH;
+        }
+
+        return RASPA_SUCCESS;
+    }
+
+    /**
      * @brief Open the rtdm device.
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
@@ -532,10 +555,11 @@ protected:
 
         if (_device_handle < 0)
         {
+            // check if driver has been configured with invalid buffer size
             if (errno ==
                 static_cast<int>(driver_conf::ErrorCode::INVALID_BUFFER_SIZE))
             {
-                return -RASPA_EBUFFER_SIZE;
+                return -RASPA_EBUFFER_SIZE_INVALID;
             }
 
             // check if it is external micro-controller related issues

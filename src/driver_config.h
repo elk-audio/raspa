@@ -137,34 +137,6 @@ int read_driver_param(const char* param_name)
 }
 
 /**
- * @brief Write int value to driver param
- *
- * @param param_name The param name
- * @param val the val to be written
- * @return int 0 upon success, negative error code otherwise
- */
-int write_driver_param(const char* param_name, int val)
-{
-    auto param_path = std::string(PARAM_ROOT_PATH) + param_name;
-    auto fd = open(param_path.c_str(), O_RDWR);
-    if (fd < 0)
-    {
-        return fd;
-    }
-
-    auto val_str = std::to_string(val);
-    auto res = write(fd, val_str.c_str(), val_str.size());
-    close(fd);
-
-    if (res < 0)
-    {
-        return errno;
-    }
-
-    return 0;
-}
-
-/**
  * Helper functions to set and get various driver params
  */
 int get_sample_rate()
@@ -192,9 +164,9 @@ int get_platform_type()
     return read_driver_param(PLATFORM_TYPE_PARAM);
 }
 
-int set_buffer_size(int val)
+int get_buffer_size()
 {
-    return write_driver_param(BUFFER_SIZE_PARAM, val);
+    return read_driver_param(BUFFER_SIZE_PARAM);
 }
 
 std::pair<bool, int> check_driver_version()
@@ -213,7 +185,8 @@ std::pair<bool, int> check_driver_version()
     }
 
     if (major_ver != REQUIRED_MAJ_VER|| minor_ver != REQUIRED_MIN_VER)
-    {        return {false, 0};
+    {
+        return {false, 0};
     }
 
     return {true, 0};

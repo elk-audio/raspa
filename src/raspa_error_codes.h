@@ -37,7 +37,7 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
  */
 #define ERROR_CODES_OP(X)\
     X(0,   RASPA_SUCCESS, "Raspa: No error. ")\
-    X(100, RASPA_EBUFFER_SIZE, "Raspa: Invalid buffer size specified ")\
+    X(100, RASPA_EBUFFER_SIZE_MISMATCH, "Raspa: Buffer size mismatch with driver ")\
     X(101, RASPA_EVERSION, "Raspa: Version mismatch with driver ")\
     X(102, RASPA_ENOMEM, "Raspa: Failed to get buffers from driver ")\
     X(103, RASPA_EUSER_BUFFERS, "Raspa: Failed to allocate user audio buffers ")\
@@ -58,6 +58,8 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
     X(118, RASPA_EINSOCKET_BIND, "Raspa: Failed to bind input socket to address ")\
     X(119, RASPA_EINSOCKET_TIMEOUT, "Raspa: Failed to set input socket to address ")\
     X(120, RASPA_EMLOCKALL, "Raspa: Failed to lock memory needed to prevent page swapping ")\
+    X(121, RASPA_EBUFFER_SIZE_INVALID, "Raspa: driver configured with invalid buffer size. ")\
+    X(122, RASPA_EBUFFER_SIZE_SC, "Raspa: sample converter does not suppot specified buffer size. ")\
     X(200, RASPA_EPARAM, "Raspa: Unable to param from driver ")\
     X(201, RASPA_EPARAM_SAMPLERATE, "Raspa: Unable to read sample rate param from driver ")\
     X(202, RASPA_EPARAM_INPUTCHANS, "Raspa: Unable to read num input chans param from driver ")\

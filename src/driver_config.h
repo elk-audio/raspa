@@ -184,7 +184,7 @@ std::pair<bool, int> check_driver_version()
         return {false, minor_ver};
     }
 
-    if (major_ver != REQUIRED_MAJ_VER|| minor_ver != REQUIRED_MIN_VER)
+    if (major_ver != REQUIRED_MAJ_VER || minor_ver < REQUIRED_MIN_VER)
     {
         return {false, 0};
     }

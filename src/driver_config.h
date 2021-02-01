@@ -78,9 +78,9 @@ enum class CodecFormat : int
  * NATIVE : Indicates that the host machine directly interfaces with the codec
  *          and GPIO system.
  * ASYNC  : Indicates that a secondary controller interfaces with the codec and
- *          GPIO system and the host machine interacts with it asychronously.
+ *          GPIO system and the host machine interacts with it asynchronously.
  * SYNC   : Indicates that a secondary controller interfaces with the codec and
- *          GPIO system and the host machine interacts with it sychronously.
+ *          GPIO system and the host machine interacts with it synchronously.
  */
 enum class PlatformType : int
 {

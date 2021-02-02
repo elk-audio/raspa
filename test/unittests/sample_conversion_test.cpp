@@ -36,7 +36,7 @@ protected:
 
     void _init_data_ramp_int(std::vector<int32_t> &buffer,
                              int buffer_size_in_samples,
-                             RaspaCodecFormat codec_format)
+                             driver_conf::CodecFormat codec_format)
     {
         buffer.resize(buffer_size_in_samples, 0);
 
@@ -46,21 +46,24 @@ protected:
             int32_t value = sample_index * 100;
             switch (codec_format)
             {
-            case RaspaCodecFormat::INT24_LJ:
+            case driver_conf::CodecFormat::INT24_LJ:
                 value = (value & 0x00FFFFFF) << 8;
                 break;
-            case RaspaCodecFormat::INT24_I2S:
+            case driver_conf::CodecFormat::INT24_I2S:
                 value = (value & 0x00FFFFFF) << 7;
                 break;
-            case RaspaCodecFormat::INT24_RJ:
+            case driver_conf::CodecFormat::INT24_RJ:
                 value = (value & 0x00FFFFFF);
                 break;
-            case RaspaCodecFormat::INT32_RJ:
+            case driver_conf::CodecFormat::INT24_32RJ:
                 // represents 24 bit of data in 32bit right justified format
                 value = (value & 0x00FFFFFF) << 8;
 
                 // extend sign
                 value = value >> 8;
+                break;
+            case driver_conf::CodecFormat::INT32:
+                // No conversion needed
                 break;
             }
             sample = value;
@@ -71,7 +74,7 @@ protected:
 
 TEST_F(TestSampleConversion, invalid_audio_parameters)
 {
-    RaspaCodecFormat codec_format = RaspaCodecFormat::NUM_CODEC_FORMATS;
+    auto codec_format = driver_conf::CodecFormat::NUM_CODEC_FORMATS;
     int num_chans = raspa::MIN_NUM_CHANNELS;
     int buffer_size = raspa::MIN_BUFFER_SIZE;
 
@@ -81,7 +84,7 @@ TEST_F(TestSampleConversion, invalid_audio_parameters)
     ASSERT_FALSE(sample_converter);
 
     // invalid number of channels
-    codec_format = RaspaCodecFormat::INT24_LJ;
+    codec_format = driver_conf::CodecFormat::INT24_LJ;
     num_chans = raspa::MAX_NUM_CHANNELS * 2;
     sample_converter = raspa::get_sample_converter(codec_format,
                                                    buffer_size, num_chans);
@@ -101,8 +104,8 @@ TEST_F(TestSampleConversion, identity_conversion_float_int_float_lj)
     std::vector<float> float_data;
     std::vector<float> expected_float_data;
 
-    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
-    bool iterate_over_codec_format = true;
+    auto codec_format = driver_conf::CodecFormat::INT24_LJ;
+    auto iterate_over_codec_format = true;
 
     while (iterate_over_codec_format)
     {
@@ -157,8 +160,8 @@ TEST_F(TestSampleConversion, identity_conversion_int_float_int_lj)
     std::vector<float> float_data;
     std::vector<int32_t> expected_int_data;
 
-    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
-    bool iterate_over_codec_format = true;
+    auto codec_format = driver_conf::CodecFormat::INT24_LJ;
+    auto iterate_over_codec_format = true;
 
     while (iterate_over_codec_format)
     {
@@ -217,7 +220,7 @@ TEST_F(TestSampleConversion, test_clipping)
 
     int buffer_size_in_frames = raspa::MAX_BUFFER_SIZE;
     int num_chans = raspa::MAX_NUM_CHANNELS;
-    RaspaCodecFormat codec_format = raspa::DEFAULT_CODEC_FORMAT;
+    auto codec_format = raspa::DEFAULT_CODEC_FORMAT;
     int buffer_size_in_samples = buffer_size_in_frames * num_chans;
 
     int32_t int24_lj_max_val = (RASPA_INT24_MAX_VALUE << 8);
@@ -247,7 +250,7 @@ TEST_F(TestSampleConversion, test_zero_conversion)
     std::vector<int32_t> int_data;
     std::vector<float> float_data;
 
-    RaspaCodecFormat codec_format = RaspaCodecFormat::INT24_LJ;
+    auto codec_format = driver_conf::CodecFormat::INT24_LJ;
     bool iterate_over_codec_format = true;
 
     while (iterate_over_codec_format)

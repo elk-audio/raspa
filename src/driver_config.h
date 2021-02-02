@@ -137,8 +137,8 @@ int read_driver_param(const char* param_name)
         return errno;
     }
 
-    // successfully read param
-    return std::stoi(param_str);
+    // Using atoi for no exception guarantee
+    return std::atoi(param_str.c_str());
 }
 
 /**

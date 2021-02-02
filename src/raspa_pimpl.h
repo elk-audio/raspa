@@ -44,6 +44,7 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <algorithm>
 
 #include "audio_control_protocol/audio_control_protocol.h"
 #include "audio_control_protocol/audio_packet_helper.h"
@@ -223,7 +224,6 @@ public:
             return -RASPA_EPARAM_VERSION;
         }
 
-        // get audio info from driver
         auto res = _get_audio_info_from_driver();
         if (res != RASPA_SUCCESS)
         {
@@ -767,9 +767,8 @@ protected:
                                  16,
                                  _buffer_size_in_samples * sizeof(float));
 
-        std::memset(_user_audio_in, 0, _buffer_size_in_samples * sizeof(float));
-        std::memset(_user_audio_out, 0, _buffer_size_in_samples *
-                                        sizeof(float));
+        std::fill_n(_user_audio_in, _buffer_size_in_samples, 0);
+        std::fill_n(_user_audio_out, _buffer_size_in_samples, 0);
 
         if (res < 0)
         {
@@ -911,13 +910,10 @@ protected:
             audio_ctrl::clear_audio_ctrl_pkt(_tx_pkt[1]);
         }
 
-        for (int i = 0; i < _buffer_size_in_samples; i++)
-        {
-            _driver_buffer_audio_out[0][i] = 0;
-            _driver_buffer_audio_out[1][i] = 0;
-            _driver_buffer_audio_in[0][i] = 0;
-            _driver_buffer_audio_in[1][i] = 0;
-        }
+        std::fill_n(_driver_buffer_audio_out[0], _buffer_size_in_samples, 0);
+        std::fill_n(_driver_buffer_audio_out[1], _buffer_size_in_samples, 0);
+        std::fill_n(_driver_buffer_audio_in[0], _buffer_size_in_samples, 0);
+        std::fill_n(_driver_buffer_audio_in[1], _buffer_size_in_samples, 0);
     }
 
     /**

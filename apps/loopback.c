@@ -32,12 +32,11 @@
 
 static int num_frames = DEFAULT_NUM_FRAMES;
 static int num_samples = 0;
+static int stop_flag = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    raspa_close();
-    printf("Device closed.\n");
-    exit(0);
+    stop_flag = 1;
 }
 
 void print_usage(char *argv[])
@@ -120,14 +119,18 @@ int main(int argc, char *argv[])
         num_samples = num_frames * raspa_get_num_output_channels();
     }
 
-    printf("Audio process started.\n");
+    printf("Loopback audio process started.\n");
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (1)
+    while (stop_flag == 0)
     {
         sleep(1);
     }
+    printf("\nClosing audio process...\n");
 
+    raspa_close();
+
+    printf("Done.\n");
     return 0;
 }

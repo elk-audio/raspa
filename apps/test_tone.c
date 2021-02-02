@@ -37,12 +37,11 @@ static float sampling_rate = 0.0f;
 const static float output_gain = 0.7f;
 const static float output_freq = 440.0f;
 static int sample_counter = 0;
+static int stop_flag = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    raspa_close();
-    printf("Device closed.\n");
-    exit(0);
+    stop_flag = 1;
 }
 
 void print_usage(char *argv[])
@@ -89,7 +88,7 @@ int main(int argc, char *argv[])
     }
 
     // Argument parsing
-    while ((option = getopt(argc, argv,"hb:")) != -1)
+    while ((option = getopt(argc, argv, "hb:")) != -1)
     {
         switch (option)
         {
@@ -128,14 +127,18 @@ int main(int argc, char *argv[])
     num_output_chans = raspa_get_num_output_channels();
     sampling_rate = raspa_get_sampling_rate();
 
-    printf("Audio process started.\n");
+    printf("Test tone audio process started.\n");
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (1)
+    while (stop_flag == 0)
     {
         sleep(1);
     }
+    printf("\nClosing audio process...\n");
 
+    raspa_close();
+
+    printf("Done.\n");
     return 0;
 }

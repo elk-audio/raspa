@@ -13,7 +13,7 @@
  */
 
 /**
- * @brief RASPA loopback audio test program.
+ * @brief Program to generate test tone on all outputs
  * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 
@@ -25,13 +25,18 @@
 #include <signal.h>
 #include <sys/mman.h>
 #include <getopt.h>
+#include <math.h>
 
 #include "raspa/raspa.h"
 
 #define DEFAULT_NUM_FRAMES 64
 
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int num_samples = 0;
+static int num_output_chans = 0;
+static float sampling_rate = 0.0f;
+const static float output_gain = 0.7f;
+const static float output_freq = 440.0f;
+static int sample_counter = 0;
 static int stop_flag = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
@@ -41,26 +46,36 @@ void sigint_handler(int __attribute__((unused)) sig)
 
 void print_usage(char *argv[])
 {
-    printf("Audio loopback program.\n\n");
+    printf("\nProgram that generates test tone on all output channels.\n\n");
     printf("Usage: \n\n");
     printf("%s [-b]\n", argv[0]);
     printf("Options:\n");
     printf("    -h               : Help for usage options.\n");
     printf("    -b <buffer size> : Specify the audio buffer size. \n"
-           "                              Default is %d. Ideally should be a \n"
-           "                              power of 2\n", DEFAULT_NUM_FRAMES);
+           "                       Default is %d. Ideally should be a \n"
+           "                       power of 2\n", DEFAULT_NUM_FRAMES);
     printf("    - stop the program with SIGINT\n\n");
 }
 
 void process(float* input, float* output, __attribute__((unused)) void* data)
 {
-    int i;
-    for (i = 0; i < num_samples; i++)
+    for (int i = 0; i < num_frames; i++)
     {
-        *output++ = *input++;
+        float output_sample = output_gain * sin(2 * M_PI * sample_counter *
+                                         output_freq / sampling_rate);
+
+        sample_counter++;
+        if (sample_counter == (int) sampling_rate)
+        {
+            sample_counter = 0;
+        }
+
+        for (int chan = 0; chan < num_output_chans; chan++)
+        {
+            output[i + (chan * num_frames)] = output_sample;
+        }
     }
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -73,7 +88,7 @@ int main(int argc, char *argv[])
     }
 
     // Argument parsing
-    while ((option = getopt(argc, argv,"hb:")) != -1)
+    while ((option = getopt(argc, argv, "hb:")) != -1)
     {
         switch (option)
         {
@@ -109,17 +124,10 @@ int main(int argc, char *argv[])
         exit(res);
     }
 
-    // Calculate total num samples
-    if(raspa_get_num_input_channels() > raspa_get_num_output_channels())
-    {
-        num_samples = num_frames * raspa_get_num_input_channels();
-    }
-    else
-    {
-        num_samples = num_frames * raspa_get_num_output_channels();
-    }
+    num_output_chans = raspa_get_num_output_channels();
+    sampling_rate = raspa_get_sampling_rate();
 
-    printf("Loopback audio process started.\n");
+    printf("Test tone audio process started.\n");
     raspa_start_realtime();
 
     // Non-RT processing loop

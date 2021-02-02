@@ -61,7 +61,7 @@ using namespace memory_relaxed_aquire_release;
 class RaspaGpioCom
 {
 public:
-    RaspaGpioCom(std::string gpio_host_socket_name,
+    RaspaGpioCom(const std::string& gpio_host_socket_name,
                  RaspaErrorCode* raspa_error_code) :
                                   _in_socket(0),
                                   _out_socket(0),

@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstddef>
 #include <array>
+#include <cstring>
 
 namespace memory_relaxed_aquire_release {
 template<typename Element, size_t Size> 
@@ -30,7 +31,10 @@ class CircularFifo{
 public:
   enum { Capacity = Size+1 };
 
-  CircularFifo() : _tail(0), _head(0){}
+  CircularFifo() : _tail(0), _head(0)
+  {
+    std::memset(&_array[0], 0, Size*sizeof(Element));
+  }
   CircularFifo(const Element& inializer) : _tail(0), _head(0)
   {
     for (auto& el : _array)

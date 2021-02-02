@@ -1,21 +1,23 @@
 /*
  * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
- * RASPA is free software: you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software Foundation,
- * either version 3 of the License, or (at your option) any later version.
+ * RASPA is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
  *
- * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the GNU General Public License for more details.
+ * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with RASPA.
- * If not, see http://www.gnu.org/licenses/ .
+ * You should have received a copy of the GNU General Public License along with
+ * RASPA. If not, see http://www.gnu.org/licenses/ .
  */
 
 /**
  * @brief Wrapper around RaspaInterface to map it to the public C API defined in
  *        raspa.h
- * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk,
+ * Stockholm
  */
 #include "raspa/raspa.h"
 #include "raspa_pimpl.h"
@@ -34,9 +36,13 @@ int raspa_init()
 
 int raspa_open(int buffer_size,
                RaspaProcessCallback process_callback,
-               void* user_data, unsigned int debug_flags)
+               void* user_data,
+               unsigned int debug_flags)
 {
-    return raspa_pimpl.open(buffer_size, process_callback, user_data, debug_flags);
+    return raspa_pimpl.open(buffer_size,
+                            process_callback,
+                            user_data,
+                            debug_flags);
 }
 
 float raspa_get_sampling_rate()

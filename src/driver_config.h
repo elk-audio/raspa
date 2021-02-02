@@ -1,38 +1,42 @@
 /*
  * Copyright 2018-2021 Modern Ancient Instruments Networked AB, dba Elk
- * RASPA is free software: you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software Foundation,
- * either version 3 of the License, or (at your option) any later version.
+ * RASPA is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
  *
- * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the GNU General Public License for more details.
+ * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with RASPA.
- * If not, see http://www.gnu.org/licenses/ .
+ * You should have received a copy of the GNU General Public License along with
+ * RASPA. If not, see http://www.gnu.org/licenses/ .
  */
 
- /**
+/**
  * @brief Contains macros, enums and functions that help in interfacing with the
  *        audio driver and its parameters
- * @copyright 2017-2021 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @copyright 2017-2021 Modern Ancient Instruments Networked AB, dba Elk,
+ * Stockholm
  */
 
-#ifndef RASPA_CONFIG_H_H
-#define RASPA_CONFIG_H_H
+#ifndef RASPA_DRIVER_CONFIG_H
+#define RASPA_DRIVER_CONFIG_H
 
 #include <fcntl.h>
+
 #include <cerrno>
 #include <string>
+#include <utility>
 
-#define RASPA_IOC_MAGIC     'r'
+#define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT              _IO(RASPA_IOC_MAGIC, 1)
-#define RASPA_PROC_START            _IO(RASPA_IOC_MAGIC, 3)
-#define RASPA_USERPROC_FINISHED     _IOW(RASPA_IOC_MAGIC, 4, int)
-#define RASPA_PROC_STOP             _IO(RASPA_IOC_MAGIC, 5)
+#define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
+#define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
+#define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
+#define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)
 
-#define RASPA_PROCESSING_TASK_PRIO  90
+#define RASPA_PROCESSING_TASK_PRIO 90
 
 namespace driver_conf {
 
@@ -60,17 +64,18 @@ constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
 constexpr char MAJ_VER_PARAM[] = "audio_rtdm_ver_maj";
 constexpr char MIN_VER_PARAM[] = "audio_rtdm_ver_min";
 
- /**
-  * @brief Enumeration to denote various codec sample formats
-  */
+/**
+ * @brief Enumeration to denote various codec sample formats
+ */
 enum class CodecFormat : int
 {
-    INT24_LJ = 1, // 24 bit samples left justified. Format : 0xXXXXXX00
-    INT24_I2S, // 24 bit samples I2S format (first bit is 0). Format: 0xXXXXXX00
-    INT24_RJ, // 24 bit samples right justified. Format : 0x00XXXXXX
-    INT24_32RJ, // 24 bit samples converted into 32 bit samples
-    INT32, // 32 bit samples
-    NUM_CODEC_FORMATS //
+    INT24_LJ = 1,  // 24 bit samples left justified. Format : 0xXXXXXX00
+    INT24_I2S,     // 24 bit samples I2S format (first bit is 0). Format:
+                   // 0xXXXXXX00
+    INT24_RJ,      // 24 bit samples right justified. Format : 0x00XXXXXX
+    INT24_32RJ,    // 24 bit samples converted into 32 bit samples
+    INT32,         // 32 bit samples
+    NUM_CODEC_FORMATS
 };
 
 /**
@@ -192,6 +197,6 @@ std::pair<bool, int> check_driver_version()
     return {true, 0};
 }
 
-} // namespace driver_conf
+}  // namespace driver_conf
 
-#endif //RASPA_CONFIG_H_H
+#endif  // RASPA_DRIVER_CONFIG_H

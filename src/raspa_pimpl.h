@@ -1,15 +1,16 @@
 /*
  * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
- * RASPA is free software: you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software Foundation,
- * either version 3 of the License, or (at your option) any later version.
+ * RASPA is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
  *
- * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the GNU General Public License for more details.
+ * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with RASPA.
- * If not, see http://www.gnu.org/licenses/ .
+ * You should have received a copy of the GNU General Public License along with
+ * RASPA. If not, see http://www.gnu.org/licenses/ .
  */
 
 /**
@@ -18,41 +19,43 @@
  *        directly interfaces with the CODECS. Provides access to RT driver
  *        through a typical callback registration service. This class provides a
  *        private implementation of the api found in raspa.h
- * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk,
+ * Stockholm
  */
-#ifndef RASPA_PIMPL_H_
-#define RASPA_PIMPL_H_
+#ifndef RASPA_RASPA_PIMPL_H
+#define RASPA_RASPA_PIMPL_H
 
+#include <sched.h>
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
-#include <sched.h>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+#include <cobalt/pthread.h>
+#include <cobalt/sys/ioctl.h>
+#include <cobalt/time.h>
 #include <rtdm/rtdm.h>
 #include <xenomai/init.h>
-#include <cobalt/pthread.h>
-#include <cobalt/time.h>
-#include <cobalt/sys/ioctl.h>
 
 #pragma GCC diagnostic pop
 
-#include <cstdlib>
-#include <cstdint>
-#include <string>
 #include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
+#include <string>
 
-#include "raspa/raspa.h"
-#include "driver_config.h"
-#include "raspa_error_codes.h"
-#include "sample_conversion.h"
-#include "raspa_delay_error_filter.h"
-#include "raspa_gpio_com.h"
 #include "audio_control_protocol/audio_control_protocol.h"
 #include "audio_control_protocol/audio_packet_helper.h"
+#include "driver_config.h"
+#include "raspa/raspa.h"
+#include "raspa_delay_error_filter.h"
+#include "raspa_error_codes.h"
+#include "raspa_gpio_com.h"
+#include "sample_conversion.h"
 
 #ifdef RASPA_DEBUG_PRINT
-#include <stdio.h>
+    #include <stdio.h>
 #endif
 
 /*
@@ -62,7 +65,7 @@
  */
 extern int optind;
 
-namespace {
+namespace raspa {
 
 // Delay in microseconds to wait for audio driver to close and stop its thread.
 constexpr int CLOSE_DELAY_US = 500000;
@@ -75,7 +78,7 @@ constexpr int THREAD_CREATE_DELAY_US = 10000;
 // Number of kernel memory pages raspa allocates
 constexpr int NUM_PAGES_KERNEL_MEM = 20;
 
-//Num of audio buffers.
+// Num of audio buffers.
 constexpr int NUM_BUFFERS = 2;
 
 // settling constant for the delay filter
@@ -84,11 +87,13 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
-// Sensei socket address
+// SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
-}
 
-namespace raspa {
+// manually passed "commandline args" to xenomai
+constexpr char XENOMAI_ARG_APP_NAME[] = "raspa";
+constexpr char XENOMAI_ARG_CPU_AFFINITY_DUAL_CORE[] = "--cpu-affinity=0,1";
+constexpr char XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE[] = "--cpu-affinity=0,1,2,3";
 
 /**
  * @brief Entry point for the real time thread
@@ -108,38 +113,39 @@ static void* raspa_pimpl_task_entry(void* data);
 class RaspaPimpl
 {
 public:
-    RaspaPimpl() : _driver_buffer(nullptr),
-                   _driver_buffer_audio_in{nullptr, nullptr},
-                   _driver_buffer_audio_out{nullptr, nullptr},
-                   _driver_cv_in{nullptr},
-                   _driver_cv_out{nullptr},
-                   _tx_pkt{nullptr, nullptr},
-                   _rx_pkt{nullptr, nullptr},
-                   _kernel_buffer_mem_size(0),
-                   _user_audio_in{nullptr},
-                   _user_audio_out{nullptr},
-                   _user_gate_in(0),
-                   _user_gate_out(0),
-                   _device_handle(-1),
-                   _interrupts_counter(0),
-                   _stop_request_flag(false),
-                   _break_on_mode_sw(false),
-                   _sample_rate(0),
-                   _num_codec_chans(0),
-                   _num_input_chans(0),
-                   _num_output_chans(0),
-                   _buffer_size_in_frames(0),
-                   _buffer_size_in_samples(0),
-                   _codec_format(driver_conf::CodecFormat::INT24_LJ),
-                   _device_opened(false),
-                   _user_buffers_allocated(false),
-                   _mmap_initialized(false),
-                   _task_started(false),
-                   _user_data(nullptr),
-                   _user_callback(nullptr),
-                   _platform_type(driver_conf::PlatformType::NATIVE),
-                   _error_filter_process_count(0),
-                   _audio_packet_seq_num(0)
+    RaspaPimpl() :
+            _driver_buffer(nullptr),
+            _driver_buffer_audio_in{nullptr, nullptr},
+            _driver_buffer_audio_out{nullptr, nullptr},
+            _driver_cv_in{nullptr},
+            _driver_cv_out{nullptr},
+            _tx_pkt{nullptr, nullptr},
+            _rx_pkt{nullptr, nullptr},
+            _kernel_buffer_mem_size(0),
+            _user_audio_in{nullptr},
+            _user_audio_out{nullptr},
+            _user_gate_in(0),
+            _user_gate_out(0),
+            _device_handle(-1),
+            _interrupts_counter(0),
+            _stop_request_flag(false),
+            _break_on_mode_sw(false),
+            _sample_rate(0.0),
+            _num_codec_chans(0),
+            _num_input_chans(0),
+            _num_output_chans(0),
+            _buffer_size_in_frames(0),
+            _buffer_size_in_samples(0),
+            _codec_format(driver_conf::CodecFormat::INT24_LJ),
+            _device_opened(false),
+            _user_buffers_allocated(false),
+            _mmap_initialized(false),
+            _task_started(false),
+            _user_data(nullptr),
+            _user_callback(nullptr),
+            _platform_type(driver_conf::PlatformType::NATIVE),
+            _error_filter_process_count(0),
+            _audio_packet_seq_num(0)
     {}
 
     ~RaspaPimpl()
@@ -155,30 +161,30 @@ public:
          * the stack, so we alloc it beforehand.
          */
         int argc = 2;
-        auto argv = new char* [argc + 1];
+        auto argv = new char*[argc + 1];
         for (int i = 0; i < argc; i++)
         {
             argv[i] = new char[32];
         }
         argv[argc] = nullptr;
 
-        std::strcpy(argv[0], "raspa");
+        std::snprintf(argv[0],
+                      sizeof(XENOMAI_ARG_APP_NAME),
+                      XENOMAI_ARG_APP_NAME);
 
-        // add cpu affinity argument to xenomai init setting it to all cores.
-        std::strcpy(argv[1], "--cpu-affinity=");
-        for (int i = 0; i < get_nprocs(); i++)
+        // dual core
+        if (get_nprocs() == 2)
         {
-            char arg_cpu_num[2];
-            std::sprintf(arg_cpu_num, "%d", i);
-
-            // add cpu number to the list
-            std::strncat(argv[1], arg_cpu_num, 2);
-
-            // add comma except for last cpu number
-            if (i != get_nprocs() - 1)
-            {
-                std::strncat(argv[1], ",", 2);
-            }
+            std::snprintf(argv[1],
+                          sizeof(XENOMAI_ARG_CPU_AFFINITY_DUAL_CORE),
+                          XENOMAI_ARG_CPU_AFFINITY_DUAL_CORE);
+        }
+        // quad core
+        else if (get_nprocs() == 4)
+        {
+            std::snprintf(argv[1],
+                          sizeof(XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE),
+                          XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE);
         }
 
         optind = 1;
@@ -205,7 +211,8 @@ public:
 
     int open(int buffer_size,
              RaspaProcessCallback process_callback,
-             void* user_data, unsigned int debug_flags)
+             void* user_data,
+             unsigned int debug_flags)
     {
         // check if driver version is ok
         auto ver_check = driver_conf::check_driver_version();
@@ -272,7 +279,7 @@ public:
 
         if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
-            auto res = _init_gpio_com();
+            res = _init_gpio_com();
             if (res != RASPA_SUCCESS)
             {
                 return res;
@@ -290,7 +297,8 @@ public:
     {
         // Initialize RT task
         _task_started = false;
-        struct sched_param rt_params = {.sched_priority = RASPA_PROCESSING_TASK_PRIO};
+        struct sched_param rt_params = {
+                            .sched_priority = RASPA_PROCESSING_TASK_PRIO};
         pthread_attr_t task_attributes;
         __cobalt_pthread_attr_init(&task_attributes);
 
@@ -304,7 +312,8 @@ public:
         CPU_ZERO(&cpuset);
         CPU_SET(0, &cpuset);
         auto res = pthread_attr_setaffinity_np(&task_attributes,
-                                               sizeof(cpu_set_t), &cpuset);
+                                               sizeof(cpu_set_t),
+                                               &cpuset);
         if (res < 0)
         {
             _cleanup();
@@ -313,8 +322,10 @@ public:
         }
 
         // Create rt thread
-        res = __cobalt_pthread_create(&_processing_task, &task_attributes,
-                                      &raspa_pimpl_task_entry, this);
+        res = __cobalt_pthread_create(&_processing_task,
+                                      &task_attributes,
+                                      &raspa_pimpl_task_entry,
+                                      this);
         if (res < 0)
         {
             _cleanup();
@@ -350,7 +361,7 @@ public:
      */
     void rt_loop()
     {
-        switch(_platform_type)
+        switch (_platform_type)
         {
         case driver_conf::PlatformType::NATIVE:
             _rt_loop_native();
@@ -370,7 +381,7 @@ public:
 
     float get_sampling_rate()
     {
-        return (float) _sample_rate;
+        return _sample_rate;
     }
 
     int get_num_input_channels()
@@ -457,17 +468,17 @@ protected:
      */
     int _get_audio_info_from_driver()
     {
-        _sample_rate = driver_conf::get_sample_rate();
+        auto sample_rate = driver_conf::get_sample_rate();
         _num_input_chans = driver_conf::get_num_input_chan();
         _num_output_chans = driver_conf::get_num_output_chan();
         auto codec_format = driver_conf::get_codec_format();
         auto platform_type = driver_conf::get_platform_type();
 
         // sanity checks on the parameters
-        if (_sample_rate < 0)
+        if (sample_rate < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EPARAM_SAMPLERATE,
-                                            _sample_rate);
+                                            sample_rate);
             return -RASPA_EPARAM_SAMPLERATE;
         }
         else if (_num_input_chans < 0)
@@ -495,9 +506,13 @@ protected:
             return -RASPA_EPARAM_PLATFORM_TYPE;
         }
 
+        _sample_rate = static_cast<float>(sample_rate);
+
         // set internal codec format
-        if (codec_format < static_cast<int>(driver_conf::CodecFormat::INT24_LJ)
-        || codec_format >= static_cast<int>(driver_conf::CodecFormat::NUM_CODEC_FORMATS))
+        if (codec_format < static_cast<int>(driver_conf::CodecFormat::
+                                                                INT24_LJ) ||
+            codec_format >= static_cast<int>(driver_conf::CodecFormat::
+                                                                 NUM_CODEC_FORMATS))
         {
             _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
             return -RASPA_ECODEC_FORMAT;
@@ -505,17 +520,20 @@ protected:
         _codec_format = static_cast<driver_conf::CodecFormat>(codec_format);
 
         // set internal platform type
-        if (platform_type < static_cast<int>(driver_conf::PlatformType::NATIVE)
-        || platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
+        if (platform_type < static_cast<int>(driver_conf::PlatformType::
+                                                                 NATIVE) ||
+            platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
         {
-            _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE, platform_type);
+            _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE,
+                                            platform_type);
             return -RASPA_EPARAM_PLATFORM_TYPE;
         }
         _platform_type = static_cast<driver_conf::PlatformType>(platform_type);
 
         // set number of codec channels
-        _num_codec_chans = (_num_input_chans > _num_output_chans)
-                           ? _num_input_chans : _num_output_chans;
+        _num_codec_chans = (_num_input_chans > _num_output_chans) ?
+                                               _num_input_chans :
+                                               _num_output_chans;
 
         return RASPA_SUCCESS;
     }
@@ -571,7 +589,8 @@ protected:
                     return -RASPA_EDEVICE_INACTIVE;
                 }
                 else if (errno ==
-                    static_cast<int>(driver_conf::ErrorCode::INVALID_FIRMWARE_VER))
+                         static_cast<int>(driver_conf::ErrorCode::
+                                                              INVALID_FIRMWARE_VER))
                 {
                     return -RASPA_EDEVICE_FIRMWARE;
                 }
@@ -614,10 +633,14 @@ protected:
     int _get_driver_buffers()
     {
         _mmap_initialized = false;
-        _driver_buffer = (int32_t*) __cobalt_mmap(NULL, _kernel_buffer_mem_size,
-                                                  PROT_READ | PROT_WRITE,
-                                                  MAP_SHARED, _device_handle,
-                                                  0);
+        auto buffer = __cobalt_mmap(NULL,
+                                    _kernel_buffer_mem_size,
+                                    PROT_READ | PROT_WRITE,
+                                    MAP_SHARED,
+                                    _device_handle,
+                                    0);
+
+        _driver_buffer = static_cast<int32_t*>(buffer);
         if (_driver_buffer == MAP_FAILED)
         {
             _raspa_error_code.set_error_val(RASPA_ENOMEM, errno);
@@ -629,7 +652,7 @@ protected:
     }
 
     /**
-     * @brief Unmaps the acquired audio buffers from the driver.
+     * @brief Un maps the acquired audio buffers from the driver.
      * @return RASPA_SUCCESS upon success, different raspa error code otherwise
      */
     int _release_driver_buffers()
@@ -682,39 +705,48 @@ protected:
         {
             _rx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) _driver_buffer;
 
-            _driver_buffer_audio_in[0] = _driver_buffer +
-                                         AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_in[0] =
+                                _driver_buffer + AUDIO_CTRL_PKT_SIZE_WORDS;
 
-            _rx_pkt[1] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_in[0]
-                                                     + _buffer_size_in_samples);
+            _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
+                                _driver_buffer_audio_in[0] +
+                                _buffer_size_in_samples);
 
-            _driver_buffer_audio_in[1] = ((int32_t*) _rx_pkt[1]) +
-                                         AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_in[1] =
+                                reinterpret_cast<int32_t*>(_rx_pkt[1]) +
+                                AUDIO_CTRL_PKT_SIZE_WORDS;
 
-            _tx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_in[1]
-                                                     + _buffer_size_in_samples);
+            _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
+                                _driver_buffer_audio_in[1] +
+                                _buffer_size_in_samples);
 
-            _driver_buffer_audio_out[0] = ((int32_t *) _tx_pkt[0])
-                                          + AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_out[0] =
+                                reinterpret_cast<int32_t*>(_tx_pkt[0]) +
+                                AUDIO_CTRL_PKT_SIZE_WORDS;
 
-            _tx_pkt[1] = (audio_ctrl::AudioCtrlPkt*) (_driver_buffer_audio_out[0]
-                                                     + _buffer_size_in_samples);
+            _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
+                                _driver_buffer_audio_out[0] +
+                                _buffer_size_in_samples);
 
-            _driver_buffer_audio_out[1] = ((int32_t *) _tx_pkt[1]) +
-                                          AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_out[1] =
+                                reinterpret_cast<int32_t*>(_tx_pkt[1]) +
+                                AUDIO_CTRL_PKT_SIZE_WORDS;
         }
         else
         {
             _driver_buffer_audio_in[0] = _driver_buffer;
-            _driver_buffer_audio_in[1] = _driver_buffer + _buffer_size_in_samples;
+            _driver_buffer_audio_in[1] = _driver_buffer +
+                                         _buffer_size_in_samples;
 
-            _driver_buffer_audio_out[0] =
-                    _driver_buffer_audio_in[1] + _buffer_size_in_samples;
-            _driver_buffer_audio_out[1] =
-                    _driver_buffer_audio_out[0] + _buffer_size_in_samples;
+            _driver_buffer_audio_out[0] = _driver_buffer_audio_in[1] +
+                                          _buffer_size_in_samples;
+            _driver_buffer_audio_out[1] = _driver_buffer_audio_out[0] +
+                                          _buffer_size_in_samples;
 
-            _driver_cv_out = (uint32_t*) _driver_buffer_audio_out[1] +
-                             _buffer_size_in_samples;
+            _driver_cv_out = reinterpret_cast<uint32_t*>(
+                                _driver_buffer_audio_out[1] +
+                                _buffer_size_in_samples);
+
             _driver_cv_in = _driver_cv_out + 1;
         }
 
@@ -728,13 +760,16 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
-        int res = posix_memalign((void**) &_user_audio_in, 16,
-                                 _buffer_size_in_samples * sizeof(float))
-                  || posix_memalign((void**) &_user_audio_out, 16,
-                                    _buffer_size_in_samples * sizeof(float));
+        int res = posix_memalign(reinterpret_cast<void**>(&_user_audio_in),
+                                 16,
+                                 _buffer_size_in_samples * sizeof(float)) ||
+                  posix_memalign(reinterpret_cast<void**>(&_user_audio_out),
+                                 16,
+                                 _buffer_size_in_samples * sizeof(float));
 
         std::memset(_user_audio_in, 0, _buffer_size_in_samples * sizeof(float));
-        std::memset(_user_audio_out, 0, _buffer_size_in_samples * sizeof(float));
+        std::memset(_user_audio_out, 0, _buffer_size_in_samples *
+                                        sizeof(float));
 
         if (res < 0)
         {
@@ -774,8 +809,8 @@ protected:
      */
     void _init_delay_error_filter()
     {
-        _delay_error_filter = std::make_unique<RaspaDelayErrorFilter>
-                                               (DELAY_FILTER_SETTLING_CONSTANT);
+        _delay_error_filter = std::make_unique<RaspaDelayErrorFilter>(
+                            DELAY_FILTER_SETTLING_CONSTANT);
     }
 
     /**
@@ -785,7 +820,8 @@ protected:
      */
     int _init_gpio_com()
     {
-        _gpio_com = std::make_unique<RaspaGpioCom>(SENSEI_SOCKET, &_raspa_error_code);
+        _gpio_com = std::make_unique<RaspaGpioCom>(SENSEI_SOCKET,
+                                                   &_raspa_error_code);
         return _gpio_com->init();
     }
 
@@ -897,8 +933,8 @@ protected:
      */
     int32_t _process_timing_error_with_downsampling(int32_t timing_error_ns)
     {
-        auto correction_in_ns =
-           _delay_error_filter->delay_error_filter_tick(timing_error_ns);
+        auto correction_in_ns = _delay_error_filter->delay_error_filter_tick(
+                            timing_error_ns);
 
         // downsampling logic
         _error_filter_process_count++;
@@ -915,15 +951,16 @@ protected:
      * @brief Helper function to perform user callback.
      *
      * @param input_samples The buffer containing input samples from the codec
-     * @param output_samples The buffer containing samples to be sent to the codec
+     * @param output_samples The buffer containing samples to be sent to the
+     * codec
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
-        _sample_converter->codec_format_to_float32n
-                           (_user_audio_in, input_samples);
+        _sample_converter->codec_format_to_float32n(_user_audio_in,
+                                                    input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
-        _sample_converter->float32n_to_codec_format
-                          (output_samples, _user_audio_out);
+        _sample_converter->float32n_to_codec_format(output_samples,
+                                                    _user_audio_out);
     }
 
     /**
@@ -943,7 +980,7 @@ protected:
 
         // retreive packets from com task and insert into audio packet payload
         while (num_blobs < AUDIO_CTRL_PKT_MAX_NUM_GPIO_DATA_BLOBS &&
-             _gpio_com->get_gpio_data_from_nrt(data[num_blobs]))
+               _gpio_com->get_gpio_data_from_nrt(data[num_blobs]))
         {
             num_blobs++;
         }
@@ -970,7 +1007,7 @@ protected:
             for (int i = 0; i < num_blobs; i++)
             {
                 const audio_ctrl::GpioDataBlob& data =
-                                   pkt->payload.gpio_data_blob[i];
+                                    pkt->payload.gpio_data_blob[i];
                 _gpio_com->send_gpio_data_to_nrt(data);
             }
 
@@ -1022,9 +1059,9 @@ protected:
             auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
             if (buf_idx < 0)
             {
-                // TODO: think how to handle this. Error here means something *bad*,
-                // so we might want to de-register the driver, cleanup and signal
-                // user someway.
+                // TODO: think how to handle this. Error here means something
+                // *bad*, so we might want to de-register the driver, cleanup
+                // and signal user someway.
                 break;
             }
 
@@ -1092,8 +1129,6 @@ protected:
      */
     void _rt_loop_sync()
     {
-        struct timespec tp;
-
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
@@ -1106,13 +1141,14 @@ protected:
             // Timing error
             auto timing_error_ns =
                                 audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
-            auto correction_ns =
-                _process_timing_error_with_downsampling(timing_error_ns);
+            auto correction_ns = _process_timing_error_with_downsampling(
+                                timing_error_ns);
 
             _parse_rx_pkt(_rx_pkt[buf_idx]);
             _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
 
-            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+            __cobalt_ioctl(_device_handle,
+                           RASPA_USERPROC_FINISHED,
                            &correction_ns);
             _interrupts_counter++;
         }
@@ -1126,13 +1162,11 @@ protected:
                 break;
             }
 
-            __cobalt_clock_gettime(CLOCK_MONOTONIC, &tp);
-
             // Timing error
             auto timing_error_ns =
                                 audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
-            auto correction_ns =
-                _process_timing_error_with_downsampling(timing_error_ns);
+            auto correction_ns = _process_timing_error_with_downsampling(
+                                timing_error_ns);
 
             // Store CV gate in
             _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
@@ -1145,7 +1179,8 @@ protected:
             // Set gate out info in tx packet
             audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
 
-            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+            __cobalt_ioctl(_device_handle,
+                           RASPA_USERPROC_FINISHED,
                            &correction_ns);
             _interrupts_counter++;
         }
@@ -1176,11 +1211,11 @@ protected:
     // flag to denote that a stop has been requested
     bool _stop_request_flag;
 
-    // flag to break on mode switch occurence
+    // flag to break on mode switch occurrence
     bool _break_on_mode_sw;
 
     // audio buffer parameters
-    int _sample_rate;
+    float _sample_rate;
     int _num_codec_chans;
     int _num_input_chans;
     int _num_output_chans;
@@ -1219,13 +1254,13 @@ protected:
 
 static void* raspa_pimpl_task_entry(void* data)
 {
-    auto raspa_pimpl = static_cast<RaspaPimpl*>(data);
-    raspa_pimpl->rt_loop();
+    auto pimpl = static_cast<RaspaPimpl*>(data);
+    pimpl->rt_loop();
 
     // To suppress warnings
     return nullptr;
 }
 
-} // namespace raspa
+}  // namespace raspa
 
-#endif // RASPA_PIMPL_H
+#endif  // RASPA_RASPA_PIMPL_H

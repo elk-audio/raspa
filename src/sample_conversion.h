@@ -1,44 +1,48 @@
 /*
  * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
- * RASPA is free software: you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software Foundation,
- * either version 3 of the License, or (at your option) any later version.
+ * RASPA is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
  *
- * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the GNU General Public License for more details.
+ * RASPA is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with RASPA.
- * If not, see http://www.gnu.org/licenses/ .
+ * You should have received a copy of the GNU General Public License along with
+ * RASPA. If not, see http://www.gnu.org/licenses/ .
  */
 
 /**
- * @brief Header file which deals converting the samples from integer to floating point
- * @copyright 2017-2029 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @brief Header file which deals converting the samples from integer to
+ * floating point
+ * @copyright 2017-2029 Modern Ancient Instruments Networked AB, dba Elk,
+ * Stockholm
  */
 
-#ifndef SAMPLE_CONVERSION_H_
-#define SAMPLE_CONVERSION_H_
+#ifndef RASPA_SAMPLE_CONVERSION_H
+#define RASPA_SAMPLE_CONVERSION_H
 
 #include <memory>
+#include <utility>
 
 #include "driver_config.h"
 
-namespace {
+namespace raspa {
+
 /**
  * scaling factors for 24 bit samples
  */
-constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;      // 2**23 - 1
-constexpr float INT24_TO_FLOAT_SCALING_FACTOR = 1.19209304e-07f; // 1.0 / (2**23 - 1)
+constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;  // 2**23 - 1
+constexpr float INT24_TO_FLOAT_SCALING_FACTOR =
+                    1.19209304e-07f;  // 1.0 / (2**23 - 1)
 
 /**
  * scaling factors for 32 bit samples
  */
-constexpr float FLOAT_TO_INT32_SCALING_FACTOR = 2147483647.0f;      // 2**31 - 1
-constexpr float INT32_TO_FLOAT_SCALING_FACTOR = 4.656612875e-10f; // 1.0 / (2**31 - 1)
-}
-
-namespace raspa {
+constexpr float FLOAT_TO_INT32_SCALING_FACTOR = 2147483647.0f;  // 2**31 - 1
+constexpr float INT32_TO_FLOAT_SCALING_FACTOR =
+                    4.656612875e-10f;  // 1.0 / (2**31 - 1)
 
 constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
 constexpr int MIN_NUM_CHANNELS = 2;
@@ -83,7 +87,8 @@ public:
  * @tparam num_channels The number of channels
  */
 template<driver_conf::CodecFormat codec_format,
-        int buffer_size_in_frames, int num_channels>
+         int buffer_size_in_frames,
+         int num_channels>
 class SampleConverter : public BaseSampleConverter
 {
 public:
@@ -104,7 +109,8 @@ public:
             for (int k = 0; k < num_channels; k++)
             {
                 auto sample = _codec_format_to_int32(*src++);
-                dst[(k * buffer_size_in_frames) + n] = _int32_to_float32n(sample);
+                dst[(k * buffer_size_in_frames) + n] =
+                                    _int32_to_float32n(sample);
             }
         }
     }
@@ -227,7 +233,7 @@ private:
     {
         if constexpr (codec_format == driver_conf::CodecFormat::INT32)
         {
-            return  sample * INT32_TO_FLOAT_SCALING_FACTOR;
+            return sample * INT32_TO_FLOAT_SCALING_FACTOR;
         }
         else
         {
@@ -247,11 +253,11 @@ private:
     {
         if constexpr (codec_format == driver_conf::CodecFormat::INT32)
         {
-            return (int32_t) (sample * FLOAT_TO_INT32_SCALING_FACTOR);
+            return static_cast<int32_t>(sample * FLOAT_TO_INT32_SCALING_FACTOR);
         }
         else
         {
-            return (int32_t) (sample * FLOAT_TO_INT24_SCALING_FACTOR);
+            return static_cast<int32_t>(sample * FLOAT_TO_INT24_SCALING_FACTOR);
         }
     }
 };
@@ -303,8 +309,8 @@ get_next_codec_format(driver_conf::CodecFormat codec_format)
     if (codec_format != driver_conf::CodecFormat::INT32)
     {
         return {true,
-                static_cast<driver_conf::CodecFormat>(static_cast<int>(codec_format) +
-                                              1)};
+                static_cast<driver_conf::CodecFormat>(
+                                    static_cast<int>(codec_format) + 1)};
     }
 
     return {false, codec_format};
@@ -326,17 +332,20 @@ get_next_codec_format(driver_conf::CodecFormat codec_format)
 template<driver_conf::CodecFormat expected_format = DEFAULT_CODEC_FORMAT,
          int expected_buffer_size = MIN_BUFFER_SIZE,
          int expected_num_chans = MIN_NUM_CHANNELS>
-std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecFormat codec_format,
-                                                          int buffer_size_in_frames,
-                                                          int num_channels)
+std::unique_ptr<BaseSampleConverter>
+get_sample_converter(driver_conf::CodecFormat codec_format,
+                     int buffer_size_in_frames,
+                     int num_channels)
 {
     if (codec_format != expected_format)
     {
         constexpr auto next_format = get_next_codec_format(expected_format);
         if constexpr (next_format.first)
         {
-            return get_sample_converter<next_format.second>(codec_format,
-                    buffer_size_in_frames, num_channels);
+            return get_sample_converter<next_format.second>(
+                                codec_format,
+                                buffer_size_in_frames,
+                                num_channels);
         }
 
         return std::unique_ptr<BaseSampleConverter>(nullptr);
@@ -344,11 +353,15 @@ std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecForm
 
     if (buffer_size_in_frames != expected_buffer_size)
     {
-        constexpr auto next_buffer_size = get_next_buffer_size(expected_buffer_size);
+        constexpr auto next_buffer_size =
+                            get_next_buffer_size(expected_buffer_size);
         if constexpr (next_buffer_size.first)
         {
-            return get_sample_converter<expected_format, next_buffer_size.second>
-                    (codec_format, buffer_size_in_frames, num_channels);
+            return get_sample_converter<expected_format,
+                                        next_buffer_size.second>(
+                                codec_format,
+                                buffer_size_in_frames,
+                                num_channels);
         }
 
         return std::unique_ptr<BaseSampleConverter>(nullptr);
@@ -356,23 +369,24 @@ std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecForm
 
     if (num_channels != expected_num_chans)
     {
-        constexpr auto next_num_chans = get_next_num_channels(expected_num_chans);
+        constexpr auto next_num_chans =
+                            get_next_num_channels(expected_num_chans);
         if constexpr (next_num_chans.first)
         {
             return get_sample_converter<expected_format,
                                         expected_buffer_size,
-                                        next_num_chans.second>(codec_format,
-                                                buffer_size_in_frames,
-                                                num_channels);
+                                        next_num_chans.second>
+                            (codec_format, buffer_size_in_frames, num_channels);
         }
 
         return std::unique_ptr<BaseSampleConverter>(nullptr);
     }
 
-    return std::make_unique<SampleConverter<static_cast<driver_conf::CodecFormat>
-            (expected_format), expected_buffer_size, expected_num_chans>>();
+    return std::make_unique<SampleConverter<expected_format,
+                                            expected_buffer_size,
+                                            expected_num_chans>>();
 }
 
-} // namespace raspa
+}  // namespace raspa
 
-#endif // SAMPLE_CONVERSION_H_
+#endif  // RASPA_SAMPLE_CONVERSION_H

@@ -17,8 +17,8 @@
  *        msgs
  * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
-#ifndef RASPA_ERROR_CODES_H_
-#define RASPA_ERROR_CODES_H_
+#ifndef RASPA_RASPA_ERROR_CODES_H
+#define RASPA_RASPA_ERROR_CODES_H
 
 #include <string>
 #include <cstring>
@@ -54,7 +54,7 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
     X(114, RASPA_EDEVICE_FIRMWARE, "Raspa: Incorrect firmware on external micro-controller ")\
     X(115, RASPA_EDEVICE_INACTIVE, "Raspa: External micro-controller not responding ")\
     X(116, RASPA_EINSOCKET_CREATION, "Raspa: Failed to create input socket for gpio data communication ")\
-    X(117, RASPA_EOUTSOCKET_CREATION, "Raspa: Failed to create output socket for gpio data communicatio ")\
+    X(117, RASPA_EOUTSOCKET_CREATION, "Raspa: Failed to create output socket for gpio data communication ")\
     X(118, RASPA_EINSOCKET_BIND, "Raspa: Failed to bind input socket to address ")\
     X(119, RASPA_EINSOCKET_TIMEOUT, "Raspa: Failed to set input socket to address ")\
     X(120, RASPA_EMLOCKALL, "Raspa: Failed to lock memory needed to prevent page swapping ")\
@@ -131,13 +131,13 @@ public:
         int _raspa_error_code = std::abs(raspa_error_code);
 
         auto error_text = _error_text.find(_raspa_error_code);
-        if(error_text == _error_text.end())
+        if (error_text == _error_text.end())
         {
             return "Raspa: Unknown error";
         }
 
         auto error_val = _error_val[_raspa_error_code];
-        if(error_val == 0)
+        if (error_val == 0)
         {
             return error_text->second;
         }
@@ -168,6 +168,6 @@ private:
     std::string _error_string;
 };
 
-} // namespace raspa
+}  // namespace raspa
 
-#endif //RASPA_ERROR_CODES_H_
+#endif  // RASPA_RASPA_ERROR_CODES_H

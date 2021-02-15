@@ -219,9 +219,16 @@ public:
         auto ver_check = driver_conf::check_driver_version();
         if (!ver_check.first)
         {
-            _raspa_error_code.set_error_val(RASPA_EPARAM_VERSION,
+            // if unable to read parameter
+            if (ver_check.second < 0)
+            {
+                _raspa_error_code.set_error_val(RASPA_EPARAM_VERSION,
                                             ver_check.second);
-            return -RASPA_EPARAM_VERSION;
+                return -RASPA_EPARAM_VERSION;
+            }
+
+            // version mismatch
+            return -RASPA_EVERSION;
         }
 
         auto res = _get_audio_info_from_driver();

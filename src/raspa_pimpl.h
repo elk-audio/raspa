@@ -917,10 +917,13 @@ protected:
             audio_ctrl::clear_audio_ctrl_pkt(_tx_pkt[1]);
         }
 
-        std::fill_n(_driver_buffer_audio_out[0], _buffer_size_in_samples, 0);
-        std::fill_n(_driver_buffer_audio_out[1], _buffer_size_in_samples, 0);
-        std::fill_n(_driver_buffer_audio_in[0], _buffer_size_in_samples, 0);
-        std::fill_n(_driver_buffer_audio_in[1], _buffer_size_in_samples, 0);
+        for (int i = 0; i < _buffer_size_in_samples; i++)
+        {
+            _driver_buffer_audio_out[0][i] = 0;
+            _driver_buffer_audio_out[1][i] = 0;
+            _driver_buffer_audio_in[0][i] = 0;
+            _driver_buffer_audio_in[1][i] = 0;
+        }
     }
 
     /**

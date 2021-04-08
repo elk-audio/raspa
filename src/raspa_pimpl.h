@@ -53,11 +53,12 @@
 #include "raspa_delay_error_filter.h"
 #include "raspa_error_codes.h"
 #include "raspa_gpio_com.h"
+#include "raspa_alsa_usb.h"
 #include "sample_conversion.h"
 
-#ifdef RASPA_DEBUG_PRINT
+//#ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
-#endif
+//#endif
 
 /*
  * This variable is defined by xenomai init. It is used to index the number
@@ -90,6 +91,9 @@ constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
 // SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
+
+//Num of ALSA USB channels
+constexpr int NUM_ALSA_USB_CHANNELS = 2;
 
 // manually passed "commandline args" to xenomai
 constexpr char XENOMAI_ARG_APP_NAME[] = "raspa";
@@ -135,6 +139,7 @@ public:
             _num_codec_chans(0),
             _num_input_chans(0),
             _num_output_chans(0),
+            _num_usb_channels(NUM_ALSA_USB_CHANNELS),
             _buffer_size_in_frames(0),
             _buffer_size_in_samples(0),
             _codec_format(driver_conf::CodecFormat::INT24_LJ),
@@ -293,10 +298,19 @@ public:
             }
         }
 
+#ifdef RASPA_WITH_ALSA_USB
+        res = _init_alsa_usb();
+        if (res)
+        {
+            printf("alsa usb init failed!\n");
+            return res;
+        }
+#endif
+
         _user_data = user_data;
         _interrupts_counter = 0;
         _user_callback = process_callback;
-
+        printf("RASPA_SUCCESS\n");
         return RASPA_SUCCESS;
     }
 
@@ -832,6 +846,18 @@ protected:
     }
 
     /**
+     * @brief Init the raspa alsa usb object.
+     *
+     * @return int RASPA_SUCCESS upon success, different error code otherwise.
+     */
+    int _init_alsa_usb()
+    {
+        _alsa_usb = std::make_unique<RaspaAlsaUsb>();
+        int srate = static_cast<int>(_sample_rate);
+        return _alsa_usb->init(srate, _buffer_size_in_frames, _num_usb_channels);
+    }
+
+    /**
      * @brief De init the sample converter instance.
      */
     void _deinit_sample_converter()
@@ -882,8 +908,14 @@ protected:
      */
     int _cleanup()
     {
+        printf("calling cleanup...\n");
         // The order is very important. Its the reverse order of instantiation,
-        auto res = _stop_rt_task();
+        auto res = _alsa_usb->close();
+        if (res)
+        {
+            printf("alsa usb close fialed\n");
+        }
+        res = _stop_rt_task();
         _free_user_buffers();
         res |= _release_driver_buffers();
         res |= _close_device();
@@ -1225,6 +1257,7 @@ protected:
     int _num_codec_chans;
     int _num_input_chans;
     int _num_output_chans;
+    int _num_usb_channels;
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;
     driver_conf::CodecFormat _codec_format;
@@ -1253,6 +1286,9 @@ protected:
 
     // Gpio Comm
     std::unique_ptr<RaspaGpioCom> _gpio_com;
+
+    // Raspa ALSA usb
+    //std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

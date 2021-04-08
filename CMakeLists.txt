@@ -10,6 +10,7 @@ project(raspalib)
 
 option(RASPA_WITH_APPS "Build included applications" OFF)
 option(RASPA_WITH_TESTS "Build and run unit tests" ON)
+option(RASPA_WITH_ALSA_USB "Build raspa with USB audio" ON)
 
 #######################
 #  Cross compilation  #
@@ -73,7 +74,11 @@ target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
 target_link_libraries(raspa PRIVATE pthread audio_control_protocol fifo)
 
 set_property(TARGET raspa PROPERTY CXX_STANDARD 17)
-target_compile_options(raspa PRIVATE -Wall -Wextra -feliminate-unused-debug-types -fno-exceptions)
+target_compile_options(raspa PRIVATE -Wall -Wextra -ffast-math -feliminate-unused-debug-types -fno-exceptions)
+
+if (${RASPA_WITH_ALSA_USB})
+    target_compile_definitions(raspa PUBLIC -DRASPA_WITH_ALSA_USB)
+endif()
 
 #############
 #  Install  #

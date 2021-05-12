@@ -48,6 +48,7 @@
 
 #include "audio_control_protocol/audio_control_protocol.h"
 #include "audio_control_protocol/audio_packet_helper.h"
+#include "audio_control_protocol/device_control_protocol.h"
 #include "driver_config.h"
 #include "raspa/raspa.h"
 #include "raspa_delay_error_filter.h"
@@ -692,52 +693,51 @@ protected:
      *        4. audio buffer out number 1
      *
      *        For other platform types
-     *        1. rx audio control packet number 0
-     *        2. audio buffer in number 0
-     *        3. rx audio control packet number 1
-     *        4. audio buffer in number 1
-     *        5. tx audio control packet number 0
-     *        6. audio buffer out number 0
-     *        7. tx audio control packet number 1
-     *        8. audio buffer out number 1
+     *        1. rx device control packet 0
+     *        2. rx audio control packet number 0
+     *        3. audio buffer in number 0
+     *        4. rx device control packet 1
+     *        5. rx audio control packet number 1
+     *        6. audio buffer in number 1
+     *        7. tx device control packet 0
+     *        8. tx audio control packet number 0
+     *        9. audio buffer out number 0
+     *        10. tx device control packet 1
+     *        11. tx audio control packet number 1
+     *        12. audio buffer out number 1
      */
     void _init_driver_buffers()
     {
         _buffer_size_in_samples = _buffer_size_in_frames * _num_codec_chans;
 
         /* If raspa platform type is not native, then the driver buffers
-         * also include space for audio control packet.
+         * also include space for audio control packet and device control packet.
          */
         if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
-            _rx_pkt[0] = (audio_ctrl::AudioCtrlPkt*) _driver_buffer;
+            int32_t* ptr = _driver_buffer + DEVICE_CTRL_PKT_SIZE_WORDS;
+            _rx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*> (ptr);
 
-            _driver_buffer_audio_in[0] =
-                                _driver_buffer + AUDIO_CTRL_PKT_SIZE_WORDS;
+            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_in[0] = ptr;
 
-            _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
-                                _driver_buffer_audio_in[0] +
-                                _buffer_size_in_samples);
+            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
-            _driver_buffer_audio_in[1] =
-                                reinterpret_cast<int32_t*>(_rx_pkt[1]) +
-                                AUDIO_CTRL_PKT_SIZE_WORDS;
+            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_in[1] = ptr;
 
-            _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
-                                _driver_buffer_audio_in[1] +
-                                _buffer_size_in_samples);
+            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
-            _driver_buffer_audio_out[0] =
-                                reinterpret_cast<int32_t*>(_tx_pkt[0]) +
-                                AUDIO_CTRL_PKT_SIZE_WORDS;
+            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_out[0] = ptr;
 
-            _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(
-                                _driver_buffer_audio_out[0] +
-                                _buffer_size_in_samples);
+            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
-            _driver_buffer_audio_out[1] =
-                                reinterpret_cast<int32_t*>(_tx_pkt[1]) +
-                                AUDIO_CTRL_PKT_SIZE_WORDS;
+            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+            _driver_buffer_audio_out[1] = ptr;
         }
         else
         {

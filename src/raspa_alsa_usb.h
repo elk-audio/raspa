@@ -21,12 +21,12 @@ namespace {
     constexpr char RASPA_USB_ALSA_DEVICE[] = "default:CARD=UAC2Gadget";
     
     //Num of ALSA buffers per each raspa buffer.(ALSA is working in nrt domain and it ll be slower than raspa)
-    constexpr unsigned RASPA_TO_ALSA_PERIOD_RATIO = 2;
+    constexpr int RASPA_TO_ALSA_PERIOD_RATIO = 2;
+
+    constexpr int NUM_ALSA_PING_PONG_PERIODS = 2;
     
     // Num of periods per ALSA buffer (Num of times ALSA wakes up per buffer)
-    constexpr unsigned ALSA_PERIOD_TO_BUFFER_RATIO = 2;
-
-    constexpr snd_pcm_format_t RASPA_PCM_FORMAT = SND_PCM_FORMAT_S32_LE;
+    constexpr int ALSA_PERIOD_TO_BUFFER_RATIO = 4;
 
 }
 
@@ -47,20 +47,22 @@ public:
         _alsa_period_size_frames = _engine_buffer_size_frames * RASPA_TO_ALSA_PERIOD_RATIO;
         _alsa_buffer_size_frames = _alsa_period_size_frames * ALSA_PERIOD_TO_BUFFER_RATIO;
 
-        _usb_audio_in_buff = std::make_unique<int32_t[]>(_alsa_buffer_size_frames * _num_channels);
-        _usb_audio_out_buff = std::make_unique<int32_t[]>(_alsa_buffer_size_frames * _num_channels);
+        _usb_audio_in_buff = std::make_unique<int32_t[]>(_alsa_period_size_frames * _num_channels *
+                                                             NUM_ALSA_PING_PONG_PERIODS);
+        _usb_audio_out_buff = std::make_unique<int32_t[]>(_alsa_period_size_frames * _num_channels *
+                                                             NUM_ALSA_PING_PONG_PERIODS);
 
         snd_pcm_hw_params_alloca(&_snd_hw_params);
         snd_pcm_sw_params_alloca(&_snd_sw_params);
 
-        snd_output_stdio_attach(&_snd_output_log, stdout, 0);
+        snd_output_stdio_attach(&_snd_output, stdout, 0);
         auto ret = snd_pcm_open(&_pcm_handle, RASPA_USB_ALSA_DEVICE, SND_PCM_STREAM_PLAYBACK, 0);
         if (ret)
         {
             printf("snd_pcm_open failed!\n");
             return ret;
         }
-        ret = _set_hw_params(_pcm_handle, _snd_hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+        ret = _set_hw_params(_pcm_handle, _snd_hw_params, SND_PCM_ACCESS_MMAP_INTERLEAVED);
         if (ret)
         {
             printf("_set_hw_params failed!\n");
@@ -72,35 +74,51 @@ public:
             printf("_set_sw_params failed!\n");
             return ret;
         }
-        printf("alsa usb init success.\n");
+        snd_pcm_dump(_pcm_handle, _snd_output);
         return 0;
     }
 
     int start_usb_streams()
     {
         _is_running = true;
-        _usb_out_thread = std::thread(&RaspaAlsaUsb::_usb_output_worker, this);
+        _alsa_worker_start();
         return 0;
     }
 
-    inline void set_usbout_index(int usb_out_idx)
+    int* get_usb_out_buffer_for_raspa()
     {
-        _raspa_usbout_buf_idx = usb_out_idx;
+        return &_usb_audio_out_buff[_raspa_common_buf_idx * _engine_buffer_size_frames * _num_channels];
     }
 
-    inline void set_usbin_index(int usb_in_idx)
+    int* get_usb_in_buffer_for_raspa()
     {
-        _raspa_usbin_buf_idx = usb_in_idx;
+        return &_usb_audio_in_buff[_raspa_common_buf_idx * _engine_buffer_size_frames * _num_channels];
+    }
+
+    void increment_buf_indices()
+    {
+        _raspa_common_buf_idx++;
+        if (_raspa_common_buf_idx % RASPA_TO_ALSA_PERIOD_RATIO == 0)
+        {
+            if (_raspa_common_buf_idx > RASPA_TO_ALSA_PERIOD_RATIO)
+            {
+                _alsa_common_period_idx = 0; // first half of alsa buffer
+            }
+            else
+            {
+                _alsa_common_period_idx = 1; // second half of alsa buffer
+            }
+        }
+        if (_raspa_common_buf_idx == (RASPA_TO_ALSA_PERIOD_RATIO * NUM_ALSA_PING_PONG_PERIODS))
+        {
+            _raspa_common_buf_idx = 0;
+        }
     }
 
     int close()
     {
         _is_running = false;
-        if(snd_pcm_close(_pcm_handle))
-        {
-            printf("snd_pcm_close failed\n");
-            return -1;
-        }
+        snd_pcm_close(_pcm_handle);
         return 0;
     }
 
@@ -114,12 +132,11 @@ private:
         return 0;
     }
 
-    /* int _xrun_recovery(snd_pcm_t *handle, int err)
+    static int _xrun_recovery(snd_pcm_t *handle, int err)
     {
-        if (verbose)
-            printf("stream recovery\n");
         if (err == -EPIPE)
-        {
+        {    /* under-run */
+            printf("under-run !\n");
             err = snd_pcm_prepare(handle);
             if (err < 0)
                 printf("Can't recovery from underrun, prepare failed: %s\n", snd_strerror(err));
@@ -127,7 +144,9 @@ private:
         } else if (err == -ESTRPIPE)
         {
             while ((err = snd_pcm_resume(handle)) == -EAGAIN)
+            {
                 sleep(1);
+            }
             if (err < 0)
             {
                 err = snd_pcm_prepare(handle);
@@ -137,62 +156,139 @@ private:
             return 0;
         }
         return err;
-    } */
+    }
 
     int _set_hw_params(snd_pcm_t *handle, snd_pcm_hw_params_t *params, snd_pcm_access_t access)
     {
+        unsigned int rrate;
         snd_pcm_uframes_t size;
-        int dir, resample = 1;
-        snd_pcm_hw_params_any(handle, params);
-        snd_pcm_hw_params_set_rate_resample(handle, params, resample);
-        snd_pcm_hw_params_set_access(handle, params, access);
-        snd_pcm_hw_params_set_format(handle, params, RASPA_PCM_FORMAT);
-        snd_pcm_hw_params_set_channels(handle, params, _num_channels);                                        
-        snd_pcm_hw_params_set_rate_near(handle, params, &_sample_rate, 0);
-        snd_pcm_hw_params_set_buffer_size_near(handle, params, &_alsa_buffer_size_frames);
-        snd_pcm_hw_params_get_buffer_size(params, &size);
+        int err, dir;
+        int resample = 0;
+
+        err = snd_pcm_hw_params_any(handle, params);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_set_rate_resample(handle, params, resample);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_set_access(handle, params, access);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S32_LE);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_set_channels(handle, params, _num_channels);
+        if (err < 0)
+        {
+            return err;
+        }
+        rrate = _sample_rate;
+        err = snd_pcm_hw_params_set_rate_near(handle, params, &rrate, 0);
+        if (err < 0)
+        {
+            return err;
+        }
+        if (rrate != _sample_rate)
+        {
+            return -EINVAL;
+        }
+        err = snd_pcm_hw_params_set_buffer_size_near(handle, params, &_alsa_buffer_size_frames);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_get_buffer_size(params, &size);
+        if (err < 0)
+        {
+            return err;
+        }
         _alsa_buffer_size_frames = size;
-        snd_pcm_hw_params_set_period_size_near(handle, params, &_alsa_period_size_frames, &dir);
-        snd_pcm_hw_params_get_period_size(params, &size, &dir);
+
+        err = snd_pcm_hw_params_set_period_size_near(handle, params, &_alsa_period_size_frames, &dir);
+        if (err < 0)
+        {
+            return err;
+        }
+        err = snd_pcm_hw_params_get_period_size(params, &size, &dir);
+        if (err < 0)
+        {
+            return err;
+        }
         _alsa_period_size_frames = size;
-        auto ret = snd_pcm_hw_params(handle, params);
-        printf("num_channels = %d buffer size = %ld, period = %ld\n", _num_channels,
-                                            _alsa_buffer_size_frames, _alsa_period_size_frames);
-        return ret;
+        err = snd_pcm_hw_params(handle, params);
+        if (err < 0)
+        {
+            return err;
+        }
+
+        printf("period = %ld, buffer = %ld\n", _alsa_period_size_frames, _alsa_buffer_size_frames);
+        return 0;
     }
 
     int _set_sw_params(snd_pcm_t *handle, snd_pcm_sw_params_t *swparams)
     {
-        snd_pcm_sw_params_current(handle, swparams);
-        snd_pcm_sw_params_set_start_threshold(handle, swparams, _alsa_period_size_frames);
-        /* allow the transfer when at least period_size samples can be processed */
-        snd_pcm_sw_params_set_avail_min(handle, swparams, _alsa_period_size_frames);
-        return snd_pcm_sw_params(handle, swparams);
+        int err;
+
+        err = snd_pcm_sw_params_current(handle, swparams);
+        if (err < 0)
+        {
+            return err;
+        }
+
+        err = snd_pcm_sw_params_set_start_threshold(handle, swparams, _alsa_period_size_frames * 2);
+        if (err < 0)
+        {
+            return err;
+        }
+
+        err = snd_pcm_sw_params_set_avail_min(handle, swparams, _alsa_period_size_frames);
+        if (err < 0)
+        {
+            return err;
+        }
+
+        err = snd_pcm_sw_params(handle, swparams);
+        if (err < 0)
+        {
+            return err;
+        }
+        return 0;
     }
 
-    void _usb_output_worker()
+    void* _usb_output_worker()
     {
         signed int *frame_ptr;
-        int ret, cptr;
-        _set_thread_fifo_priority(50);
+        int err, cptr;
+
         while (_is_running)
         {
-            frame_ptr = &_usb_audio_out_buff[_raspa_usbout_buf_idx * _alsa_period_size_frames
+            frame_ptr = &_usb_audio_out_buff[_alsa_common_period_idx * _alsa_period_size_frames
                                                                                  * _num_channels];
-            cptr = _alsa_period_size_frames;
+            cptr = _alsa_period_size_frames/4;
             while (cptr > 0)
             {
-
-                ret = snd_pcm_writei(_pcm_handle, frame_ptr, cptr);
-                snd_pcm_avail_delay(_pcm_handle,&_frames_available,&_frames_delay);
-                if (ret == -EAGAIN)
-                {
+                err = snd_pcm_mmap_writei(_pcm_handle, frame_ptr, cptr);
+                if (err == -EAGAIN)
                     continue;
-                } 
-                frame_ptr += ret * _num_channels;
-                cptr -= ret;
+                if (err < 0)
+                {
+                    _xrun_recovery(_pcm_handle, err);
+                    break;
+                }
+                frame_ptr += err * _num_channels;
+                cptr -= err;
             }
         }
+
+        return nullptr;
     }
 
     void _usb_input_worker()
@@ -200,25 +296,52 @@ private:
 
     }
 
+    static void* _usb_out_thread(void* data)
+    {
+        auto raspa_alsa_usb = reinterpret_cast<RaspaAlsaUsb *>(data);
+        return raspa_alsa_usb->_usb_output_worker();
+    }
+
+    int _alsa_worker_start()
+    {
+        struct sched_param rt_params = {.sched_priority = 50};
+        pthread_attr_t task_attributes;
+        pthread_attr_init(&task_attributes);
+
+        pthread_attr_setdetachstate(&task_attributes, PTHREAD_CREATE_JOINABLE);
+        pthread_attr_setinheritsched(&task_attributes, PTHREAD_EXPLICIT_SCHED);
+        pthread_attr_setschedpolicy(&task_attributes, SCHED_FIFO);
+        pthread_attr_setschedparam(&task_attributes, &rt_params);
+
+        int res = pthread_create(&_usb_out_worker, &task_attributes,
+                                &this->_usb_out_thread, this);
+        if (res)
+        {
+            fprintf(stderr, "Error opening file: %s\n", strerror(res));
+            return -1;
+        }
+        return 0;
+    }
+
     int _engine_buffer_size_frames = 0;
     int _num_channels = 0;
     unsigned _sample_rate = 0;
-    
-    std::thread _usb_out_thread;
-    std::thread _usb_in_thread;
 
-    bool _is_running;
+    pthread_t _usb_out_worker;
+
+    std::atomic_bool _is_running = {false};
 
     std::unique_ptr<int32_t[]> _usb_audio_out_buff;
     std::unique_ptr<int32_t[]> _usb_audio_in_buff;
-    int _raspa_usbin_buf_idx = 0;
-    int _raspa_usbout_buf_idx = 0;
+
+    int _raspa_common_buf_idx = 0; //increments every raspa buffer size
+    int _alsa_common_period_idx = 0; //increments every alsa period
 
     snd_pcm_uframes_t _alsa_buffer_size_frames = 0;
     snd_pcm_uframes_t _alsa_period_size_frames = 0;
     snd_pcm_hw_params_t *_snd_hw_params = nullptr;
     snd_pcm_sw_params_t *_snd_sw_params = nullptr;
-    snd_output_t *_snd_output_log = NULL;
+    snd_output_t *_snd_output = NULL;
     snd_pcm_sframes_t _frames_delay;
     snd_pcm_sframes_t _frames_available;
     snd_pcm_t *_pcm_handle;

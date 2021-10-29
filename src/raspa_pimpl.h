@@ -305,12 +305,12 @@ public:
             printf("alsa usb init failed!\n");
             return res;
         }
+        printf("Raspa with alsa initialized\n");
 #endif
 
         _user_data = user_data;
         _interrupts_counter = 0;
         _user_callback = process_callback;
-        printf("RASPA_SUCCESS\n");
         return RASPA_SUCCESS;
     }
 
@@ -373,6 +373,10 @@ public:
             _raspa_error_code.set_error_val(RASPA_ETASK_START, res);
             return -RASPA_ETASK_START;
         }
+
+#ifdef RASPA_WITH_ALSA_USB
+        _alsa_usb->start_usb_streams();
+#endif
 
         return RASPA_SUCCESS;
     }
@@ -461,12 +465,15 @@ public:
 
     int close()
     {
+        int res;
         _stop_request_flag = true;
-
+#ifdef RASPA_WITH_ALSA_USB
+        res = _alsa_usb->close();
+#endif
         // Wait sometime for periodic task to send mute command to device
         usleep(STOP_REQUEST_DELAY_US);
 
-        auto res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
+        res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
 
         // Wait for driver to stop current transfers.
         usleep(CLOSE_DELAY_US);
@@ -908,14 +915,9 @@ protected:
      */
     int _cleanup()
     {
-        printf("calling cleanup...\n");
         // The order is very important. Its the reverse order of instantiation,
-        auto res = _alsa_usb->close();
-        if (res)
-        {
-            printf("alsa usb close fialed\n");
-        }
-        res = _stop_rt_task();
+        
+        auto res = _stop_rt_task();
         _free_user_buffers();
         res |= _release_driver_buffers();
         res |= _close_device();
@@ -1288,7 +1290,7 @@ protected:
     std::unique_ptr<RaspaGpioCom> _gpio_com;
 
     // Raspa ALSA usb
-    //std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
+    std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

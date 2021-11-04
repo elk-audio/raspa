@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
+ * Copyright 2018-2021 Modern Ancient Instruments Networked AB, dba Elk
  * RASPA is free software: you can redistribute it and/or modify it under the terms
  * of the GNU General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
@@ -14,7 +14,7 @@
 
 /**
  * @brief C API for low-level access to RTDM Audio device from userspace.
- * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @copyright 2017-2021 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 
 #ifndef RASPA_H_
@@ -26,9 +26,10 @@
 extern "C" {
 #endif
 
-// version definition
+// defines the api version
 #define RASPA_VERSION_MAJ 0
 #define RASPA_VERSION_MIN 1
+#define RASPA_VERSION_REV 3
 
 /**
  * @brief Convert error codes to human readable strings.

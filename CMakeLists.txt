@@ -70,7 +70,7 @@ add_xenomai_to_target(raspa)
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
 
-target_link_libraries(raspa PRIVATE pthread)
+target_link_libraries(raspa PRIVATE pthread audio_control_protocol fifo)
 
 set_property(TARGET raspa PROPERTY CXX_STANDARD 17)
 target_compile_options(raspa PRIVATE -Wall -Wextra -ffast-math -feliminate-unused-debug-types -fno-exceptions)
@@ -91,6 +91,9 @@ install(TARGETS raspa
 #############################################
 #  Subdirectory projects                    #
 #############################################
+add_subdirectory(audio_control_protocol)
+add_subdirectory(third-party/fifo)
+
 if (${RASPA_WITH_APPS})
     add_subdirectory(apps)
 endif()

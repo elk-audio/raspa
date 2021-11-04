@@ -144,36 +144,73 @@ int read_driver_param(const char* param_name)
 /**
  * Helper functions to set and get various driver params
  */
+
+/**
+ * @brief Get the sample rate info from the driver
+ *
+ * @return int The sample rate
+ */
 int get_sample_rate()
 {
     return read_driver_param(SAMPLE_RATE_PARAM);
 }
 
+/**
+ * @brief Get info about the number of input channels from the driver
+ *
+ * @return int The number of input channels
+ */
 int get_num_input_chan()
 {
     return read_driver_param(NUM_INPUT_CHANS_PARAM);
 }
 
+/**
+ * @brief Get info about the number of output channels from the driver
+ *
+ * @return int The number of output channels
+ */
 int get_num_output_chan()
 {
     return read_driver_param(NUM_OUTPUT_CHANS_PARAM);
 }
 
+/**
+ * @brief Get info about the codec format from the driver
+ *
+ * @return int The codec format i.e one of CodecFormat
+ */
 int get_codec_format()
 {
     return read_driver_param(CODEC_FORMAT_PARAM);
 }
 
+/**
+ * @brief Get info about the platform type from the driver.
+ *
+ * @return int one of PlatformType
+ */
 int get_platform_type()
 {
     return read_driver_param(PLATFORM_TYPE_PARAM);
 }
 
+/**
+ * @brief Get info about the buffer size from the driver.
+ *
+ * @return int one of PlatformType
+ */
 int get_buffer_size()
 {
     return read_driver_param(BUFFER_SIZE_PARAM);
 }
 
+/**
+ * @brief Check the driver version.
+ *
+ * @return std::pair<bool, int> false if version mismatches along with the
+           mismatched version, true upon success
+ */
 std::pair<bool, int> check_driver_version()
 {
     auto major_ver = read_driver_param(MAJ_VER_PARAM);

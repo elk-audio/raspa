@@ -3,4 +3,4 @@
 	url = https://github.com/google/googletest.git
 [submodule "audio-control-protocol"]
 	path = audio-control-protocol
-	url = git@github.com:elk-audio/audio-control-protocol.git
+	url = https://github.com/elk-audio/audio-control-protocol.git

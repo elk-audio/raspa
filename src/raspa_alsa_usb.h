@@ -18,12 +18,10 @@
 
 namespace {
     // Device name of the USB audio gadget listed by ALSA
-    constexpr char RASPA_USB_ALSA_DEVICE[] = "default:CARD=UAC2Gadget";
+    constexpr char RASPA_USB_ALSA_DEVICE[] = "sysdefault:CARD=UAC2Gadget";
     
     //Num of ALSA buffers per each raspa buffer.(ALSA is working in nrt domain and it ll be slower than raspa)
     constexpr int RASPA_TO_ALSA_PERIOD_RATIO = 2;
-
-    constexpr int NUM_ALSA_PING_PONG_PERIODS = 2;
     
     // Num of periods per ALSA buffer (Num of times ALSA wakes up per buffer)
     constexpr int ALSA_PERIOD_TO_BUFFER_RATIO = 4;
@@ -47,10 +45,8 @@ public:
         _alsa_period_size_frames = _engine_buffer_size_frames * RASPA_TO_ALSA_PERIOD_RATIO;
         _alsa_buffer_size_frames = _alsa_period_size_frames * ALSA_PERIOD_TO_BUFFER_RATIO;
 
-        _usb_audio_in_buff = std::make_unique<int32_t[]>(_alsa_period_size_frames * _num_channels *
-                                                             NUM_ALSA_PING_PONG_PERIODS);
-        _usb_audio_out_buff = std::make_unique<int32_t[]>(_alsa_period_size_frames * _num_channels *
-                                                             NUM_ALSA_PING_PONG_PERIODS);
+        _usb_audio_in_buff = std::make_unique<int32_t[]>(_alsa_buffer_size_frames * _num_channels);
+        _usb_audio_out_buff = std::make_unique<int32_t[]>(_alsa_buffer_size_frames * _num_channels);
 
         snd_pcm_hw_params_alloca(&_snd_hw_params);
         snd_pcm_sw_params_alloca(&_snd_sw_params);
@@ -97,22 +93,10 @@ public:
 
     void increment_buf_indices()
     {
+        _alsa_common_period_idx = _raspa_common_buf_idx/RASPA_TO_ALSA_PERIOD_RATIO;
         _raspa_common_buf_idx++;
-        if (_raspa_common_buf_idx % RASPA_TO_ALSA_PERIOD_RATIO == 0)
-        {
-            if (_raspa_common_buf_idx > RASPA_TO_ALSA_PERIOD_RATIO)
-            {
-                _alsa_common_period_idx = 0; // first half of alsa buffer
-            }
-            else
-            {
-                _alsa_common_period_idx = 1; // second half of alsa buffer
-            }
-        }
-        if (_raspa_common_buf_idx == (RASPA_TO_ALSA_PERIOD_RATIO * NUM_ALSA_PING_PONG_PERIODS))
-        {
-            _raspa_common_buf_idx = 0;
-        }
+        _raspa_common_buf_idx %= (RASPA_TO_ALSA_PERIOD_RATIO *
+                                    ALSA_PERIOD_TO_BUFFER_RATIO);
     }
 
     int close()
@@ -270,9 +254,8 @@ private:
 
         while (_is_running)
         {
-            frame_ptr = &_usb_audio_out_buff[_alsa_common_period_idx * _alsa_period_size_frames
-                                                                                 * _num_channels];
-            cptr = _alsa_period_size_frames/4;
+            frame_ptr = &_usb_audio_out_buff[_alsa_common_period_idx * _alsa_period_size_frames * _num_channels];
+            cptr = _alsa_period_size_frames;
             while (cptr > 0)
             {
                 err = snd_pcm_mmap_writei(_pcm_handle, frame_ptr, cptr);
@@ -287,7 +270,6 @@ private:
                 cptr -= err;
             }
         }
-
         return nullptr;
     }
 

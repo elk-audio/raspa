@@ -375,6 +375,7 @@ public:
         }
 
 #ifdef RASPA_WITH_ALSA_USB
+        usleep(10000);
         _alsa_usb->start_usb_streams();
 #endif
 
@@ -829,6 +830,9 @@ protected:
         _sample_converter = get_sample_converter(_codec_format,
                                                  _buffer_size_in_frames,
                                                  _num_codec_chans);
+        _usb_sample_converter = get_sample_converter(_codec_format,
+                                                 _buffer_size_in_frames,
+                                                 _num_usb_channels);
     }
 
     /**
@@ -870,6 +874,7 @@ protected:
     void _deinit_sample_converter()
     {
         _sample_converter.reset();
+        _usb_sample_converter.reset();
     }
 
     /**
@@ -1001,6 +1006,11 @@ protected:
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
         _sample_converter->float32n_to_codec_format(output_samples,
                                                     _user_audio_out);
+
+        int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
+        _usb_sample_converter->float32n_to_codec_format(usb_out,
+                                                _user_audio_out);
+        _alsa_usb->increment_buf_indices();
     }
 
     /**
@@ -1264,6 +1274,7 @@ protected:
     int _buffer_size_in_samples;
     driver_conf::CodecFormat _codec_format;
     std::unique_ptr<BaseSampleConverter> _sample_converter;
+    std::unique_ptr<BaseSampleConverter> _usb_sample_converter;
 
     // initialization phases
     bool _device_opened;

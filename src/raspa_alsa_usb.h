@@ -18,10 +18,10 @@
 
 namespace {
     // Device name of the USB audio gadget listed by ALSA
-    constexpr char RASPA_USB_ALSA_DEVICE[] = "sysdefault:CARD=UAC2Gadget";
+    constexpr char RASPA_USB_ALSA_DEVICE[] = "hw:0,0";
     
     //Num of ALSA buffers per each raspa buffer.(ALSA is working in nrt domain and it ll be slower than raspa)
-    constexpr int RASPA_TO_ALSA_PERIOD_RATIO = 2;
+    constexpr int RASPA_TO_ALSA_PERIOD_RATIO = 4;
     
     // Num of periods per ALSA buffer (Num of times ALSA wakes up per buffer)
     constexpr int ALSA_PERIOD_TO_BUFFER_RATIO = 4;
@@ -93,7 +93,11 @@ public:
 
     void increment_buf_indices()
     {
-        _alsa_common_period_idx = _raspa_common_buf_idx/RASPA_TO_ALSA_PERIOD_RATIO;
+        if (_raspa_common_buf_idx % RASPA_TO_ALSA_PERIOD_RATIO == 0)
+        {
+            _alsa_common_period_idx = _raspa_common_buf_idx/RASPA_TO_ALSA_PERIOD_RATIO;
+        }
+
         _raspa_common_buf_idx++;
         _raspa_common_buf_idx %= (RASPA_TO_ALSA_PERIOD_RATIO *
                                     ALSA_PERIOD_TO_BUFFER_RATIO);

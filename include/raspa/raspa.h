@@ -29,7 +29,7 @@ extern "C" {
 // defines the api version
 #define RASPA_VERSION_MAJ 0
 #define RASPA_VERSION_MIN 1
-#define RASPA_VERSION_REV 3
+#define RASPA_VERSION_REV 4
 
 /**
  * @brief Convert error codes to human readable strings.

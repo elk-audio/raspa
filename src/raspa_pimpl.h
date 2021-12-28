@@ -89,6 +89,9 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
+//Num of USB channels
+constexpr int NUM_USB_CHANNELS = 2;
+
 // SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
 
@@ -129,6 +132,8 @@ public:
             _kernel_buffer_mem_size(0),
             _user_audio_in{nullptr},
             _user_audio_out{nullptr},
+            _user_audio_in_usb{nullptr},
+            _user_audio_out_usb{nullptr},
             _user_gate_in(0),
             _user_gate_out(0),
             _device_handle(-1),
@@ -138,7 +143,9 @@ public:
             _sample_rate(0.0),
             _num_codec_chans(0),
             _num_input_chans(0),
+            _num_total_input_chans(0),
             _num_output_chans(0),
+            _num_total_output_chans(0),
             _num_usb_channels(NUM_ALSA_USB_CHANNELS),
             _buffer_size_in_frames(0),
             _buffer_size_in_samples(0),
@@ -412,12 +419,12 @@ public:
 
     int get_num_input_channels()
     {
-        return _num_input_chans;
+        return _num_total_input_chans;
     }
 
     int get_num_output_channels()
     {
-        return _num_output_chans;
+        return _num_total_output_chans;
     }
 
     const char* get_error_msg(int code)
@@ -563,6 +570,8 @@ protected:
         _num_codec_chans = (_num_input_chans > _num_output_chans) ?
                                                _num_input_chans :
                                                _num_output_chans;
+        _num_total_input_chans = _num_input_chans + _num_usb_channels;
+        _num_total_output_chans = _num_output_chans + _num_usb_channels;
 
         return RASPA_SUCCESS;
     }
@@ -789,15 +798,20 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
+        int num_user_audio_samples = _buffer_size_in_samples + 
+                                    _num_usb_channels * _buffer_size_in_frames;
         int res = posix_memalign(reinterpret_cast<void**>(&_user_audio_in),
                                  16,
-                                 _buffer_size_in_samples * sizeof(float)) ||
+                                 num_user_audio_samples * sizeof(float)) ||
                   posix_memalign(reinterpret_cast<void**>(&_user_audio_out),
                                  16,
-                                 _buffer_size_in_samples * sizeof(float));
+                                 num_user_audio_samples * sizeof(float));
 
-        std::fill_n(_user_audio_in, _buffer_size_in_samples, 0);
-        std::fill_n(_user_audio_out, _buffer_size_in_samples, 0);
+        std::fill_n(_user_audio_in, num_user_audio_samples, 0);
+        std::fill_n(_user_audio_out, num_user_audio_samples, 0);
+
+        _user_audio_in_usb = _user_audio_in + _buffer_size_in_samples;
+        _user_audio_out_usb = _user_audio_out + _buffer_size_in_samples;
 
         if (res < 0)
         {
@@ -1009,7 +1023,7 @@ protected:
 
         int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
         _usb_sample_converter->float32n_to_codec_format(usb_out,
-                                                _user_audio_out);
+                                                _user_audio_out_usb);
         _alsa_usb->increment_buf_indices();
     }
 
@@ -1249,6 +1263,8 @@ protected:
     // User buffers for audio
     float* _user_audio_in;
     float* _user_audio_out;
+    float* _user_audio_in_usb;
+    float* _user_audio_out_usb;
     uint32_t _user_gate_in;
     uint32_t _user_gate_out;
 
@@ -1268,7 +1284,9 @@ protected:
     float _sample_rate;
     int _num_codec_chans;
     int _num_input_chans;
+    int _num_total_input_chans;
     int _num_output_chans;
+    int _num_total_output_chans;
     int _num_usb_channels;
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;

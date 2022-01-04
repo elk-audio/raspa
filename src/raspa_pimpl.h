@@ -422,6 +422,11 @@ public:
         return _num_total_input_chans;
     }
 
+    int get_num_usb_channels()
+    {
+        return _num_usb_channels;
+    }
+
     int get_num_output_channels()
     {
         return _num_total_output_chans;
@@ -1015,6 +1020,9 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
+        int32_t* usb_in = _alsa_usb->get_usb_in_buffer_for_raspa();
+        _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
+                                                usb_in);
         _sample_converter->codec_format_to_float32n(_user_audio_in,
                                                     input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);

@@ -56,9 +56,9 @@
 #include "raspa_alsa_usb.h"
 #include "sample_conversion.h"
 
-//#ifdef RASPA_DEBUG_PRINT
+#ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
-//#endif
+#endif
 
 /*
  * This variable is defined by xenomai init. It is used to index the number
@@ -309,10 +309,8 @@ public:
         res = _init_alsa_usb();
         if (res)
         {
-            printf("alsa usb init failed!\n");
-            return res;
+            return -RASPA_EALSA_INIT_FAILED;
         }
-        printf("Raspa with alsa initialized\n");
 #endif
 
         _user_data = user_data;
@@ -382,10 +380,8 @@ public:
         }
 
 #ifdef RASPA_WITH_ALSA_USB
-        usleep(10000);
         _alsa_usb->start_usb_streams();
 #endif
-
         return RASPA_SUCCESS;
     }
 
@@ -814,10 +810,10 @@ protected:
 
         std::fill_n(_user_audio_in, num_user_audio_samples, 0);
         std::fill_n(_user_audio_out, num_user_audio_samples, 0);
-
+#ifdef RASPA_WITH_ALSA_USB
         _user_audio_in_usb = _user_audio_in + _buffer_size_in_samples;
         _user_audio_out_usb = _user_audio_out + _buffer_size_in_samples;
-
+#endif
         if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EUSER_BUFFERS, res);
@@ -1012,6 +1008,20 @@ protected:
     }
 
     /**
+     * @brief helper function ro clear input usb samples
+     * 
+     * @param buffer 
+     */
+    template <typename T>
+    void _clear_usb_buffer(T* buffer)
+    {
+        for (int i = 0; i < _buffer_size_in_frames * _num_usb_channels; i++)
+        {
+            buffer[i] = 0;
+        }
+    }
+
+    /**
      * @brief Helper function to perform user callback.
      *
      * @param input_samples The buffer containing input samples from the codec
@@ -1020,19 +1030,31 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
-        int32_t* usb_in = _alsa_usb->get_usb_in_buffer_for_raspa();
-        _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
-                                                usb_in);
+#ifdef RASPA_WITH_ALSA_USB
+        int32_t* usb_in;
+        if (_alsa_usb->get_usb_input_samples(usb_in))
+        {
+            _clear_usb_buffer<float>(_user_audio_in_usb);
+        }
+        else
+        {
+            _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
+                                                    usb_in);
+            _clear_usb_buffer<int32_t>(usb_in);
+        }
+#endif
         _sample_converter->codec_format_to_float32n(_user_audio_in,
                                                     input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
         _sample_converter->float32n_to_codec_format(output_samples,
                                                     _user_audio_out);
-
+#ifdef RASPA_WITH_ALSA_USB
         int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
         _usb_sample_converter->float32n_to_codec_format(usb_out,
                                                 _user_audio_out_usb);
+        _alsa_usb->put_usb_output_samples(usb_out);
         _alsa_usb->increment_buf_indices();
+#endif
     }
 
     /**

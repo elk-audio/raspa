@@ -68,6 +68,7 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
     X(205, RASPA_EPARAM_PLATFORM_TYPE, "Raspa: Unable to read platform type param from driver ")\
     X(206, RASPA_EPARAM_VERSION, "Raspa: Unable to read driver version param from driver ")\
     X(207, RASPA_EPARAM_BUFFER_SIZE, "Raspa: Unable to access buffer size param of driver ")\
+    X(208, RASPA_EALSA_INIT_FAILED, "Raspa: Alsa usb init failed ")\
 
 /**
  * @brief Macro to define the error codes as enums

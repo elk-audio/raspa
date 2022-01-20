@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2020 Modern Ancient Instruments Networked AB, dba Elk
+ * Copyright 2018-2021 Modern Ancient Instruments Networked AB, dba Elk
  * RASPA is free software: you can redistribute it and/or modify it under the terms
  * of the GNU General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
@@ -13,8 +13,8 @@
  */
 
 /**
- * @brief Program to generate test tone on all outputs
- * @copyright 2017-2020 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
+ * @brief Program to generate test tone on all output channnels
+ * @copyright 2017-2021 Modern Ancient Instruments Networked AB, dba Elk, Stockholm
  */
 
 #include <stdio.h>

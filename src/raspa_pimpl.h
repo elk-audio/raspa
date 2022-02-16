@@ -54,9 +54,11 @@
 #include "raspa_delay_error_filter.h"
 #include "raspa_error_codes.h"
 #include "raspa_gpio_com.h"
-#include "raspa_alsa_usb.h"
 #include "sample_conversion.h"
 
+#ifdef RASPA_WITH_ALSA_USB
+    #include "raspa_alsa_usb.h"
+#endif
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
 #endif
@@ -90,14 +92,15 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
-//Num of USB channels
-constexpr int NUM_USB_CHANNELS = 2;
+//Num of ALSA USB channels
+#ifdef RASPA_WITH_ALSA_USB
+    constexpr int NUM_ALSA_USB_CHANNELS = 2;
+#else
+    constexpr int NUM_ALSA_USB_CHANNELS = 0;
+#endif
 
 // SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
-
-//Num of ALSA USB channels
-constexpr int NUM_ALSA_USB_CHANNELS = 2;
 
 // manually passed "commandline args" to xenomai
 constexpr char XENOMAI_ARG_APP_NAME[] = "raspa";
@@ -845,9 +848,11 @@ protected:
         _sample_converter = get_sample_converter(_codec_format,
                                                  _buffer_size_in_frames,
                                                  _num_codec_chans);
+#ifdef RASPA_WITH_ALSA_USB
         _usb_sample_converter = get_sample_converter(_codec_format,
                                                  _buffer_size_in_frames,
                                                  _num_usb_channels);
+#endif
     }
 
     /**
@@ -871,6 +876,7 @@ protected:
         return _gpio_com->init();
     }
 
+#ifdef RASPA_WITH_ALSA_USB
     /**
      * @brief Init the raspa alsa usb object.
      *
@@ -882,6 +888,7 @@ protected:
         int srate = static_cast<int>(_sample_rate);
         return _alsa_usb->init(srate, _buffer_size_in_frames, _num_usb_channels);
     }
+#endif
 
     /**
      * @brief De init the sample converter instance.
@@ -1348,8 +1355,10 @@ protected:
     // Gpio Comm
     std::unique_ptr<RaspaGpioCom> _gpio_com;
 
+#ifdef RASPA_WITH_ALSA_USB
     // Raspa ALSA usb
     std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
+#endif
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

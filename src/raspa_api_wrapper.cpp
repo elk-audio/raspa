@@ -94,3 +94,18 @@ void raspa_set_gate_values(uint32_t cv_gates_out)
 {
     raspa_pimpl.set_gate_values(cv_gates_out);
 }
+
+int raspa_request_gpio(int pin_num)
+{
+    return raspa_pimpl.request_gpio(pin_num);
+}
+
+int raspa_set_gpio(int pin_num, int val)
+{
+    return raspa_pimpl.set_gpio(pin_num, val);
+}
+
+int raspa_free_gpio(int pin_num)
+{
+    return raspa_pimpl.free_gpio(pin_num);
+}

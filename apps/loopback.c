@@ -33,6 +33,8 @@
 static int num_frames = DEFAULT_NUM_FRAMES;
 static int num_samples = 0;
 static int stop_flag = 0;
+static int gpio_pin = 141;
+static int pin_status = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
@@ -55,12 +57,13 @@ void print_usage(char *argv[])
 void process(float* input, float* output, __attribute__((unused)) void* data)
 {
     int i;
+    raspa_set_gpio(gpio_pin, pin_status);
+    pin_status = !pin_status;
     for (i = 0; i < num_samples; i++)
     {
         *output++ = *input++;
     }
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -119,6 +122,12 @@ int main(int argc, char *argv[])
         num_samples = num_frames * raspa_get_num_output_channels();
     }
 
+    res = raspa_request_gpio(gpio_pin);
+    if (res)
+    {
+        printf("Failed to get GPIO\n");
+    }
+
     printf("Loopback audio process started.\n");
     raspa_start_realtime();
 
@@ -129,8 +138,12 @@ int main(int argc, char *argv[])
     }
     printf("\nClosing audio process...\n");
 
-    raspa_close();
+    if (raspa_free_gpio(gpio_pin))
+    {
+        printf("gpio free failed \n");
+    }
 
+    raspa_close();
     printf("Done.\n");
     return 0;
 }

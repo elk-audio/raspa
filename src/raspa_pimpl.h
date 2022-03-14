@@ -69,6 +69,17 @@ extern int optind;
 
 namespace raspa {
 
+/**
+ * @brief RtGpio is used to communicate with the driver for handling
+ * gpios in real-time context
+ *
+ */
+typedef struct rt_gpio {
+	int num;
+	int dir;
+	int val;
+} RtGpio;
+
 // Delay in microseconds to wait for audio driver to close and stop its thread.
 constexpr int CLOSE_DELAY_US = 500000;
 
@@ -468,6 +479,51 @@ public:
         return _cleanup();
     }
 
+    int request_gpio(int pin_num)
+    {
+        RtGpio rtgpio_requested;
+        rtgpio_requested.num = pin_num;
+        rtgpio_requested.val = 0;
+
+        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_GET_PIN,
+                                    &rtgpio_requested);
+        if (res)
+        {
+            return -RASPA_EGPIO_UNSUPPORTED;
+        }
+        res = __cobalt_ioctl(_device_handle, RASPA_GPIO_SET_DIR_OUT,
+                                &rtgpio_requested);
+        return 0;
+    }
+
+    int set_gpio(int pin_num, int val)
+    {
+        RtGpio rtgpio_requested;
+        rtgpio_requested.num = pin_num;
+        rtgpio_requested.val = val;
+
+        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_SET_VAL,
+                                    &rtgpio_requested);
+        if (res)
+        {
+            return -RASPA_EGPIO_UNSUPPORTED;
+        }
+        return 0;
+    }
+
+    int free_gpio(int pin_num)
+    {
+        RtGpio rtgpio_requested;
+        rtgpio_requested.num = pin_num;
+        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_RELEASE,
+                                    &rtgpio_requested);
+        if (res)
+        {
+            printf("RASPA_GPIO_RELEASE ret = %d\n", res);
+            return -RASPA_EGPIO_UNSUPPORTED;
+        }
+        return 0;
+    }
 
 protected:
     /**

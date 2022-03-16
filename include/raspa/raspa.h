@@ -158,7 +158,7 @@ void raspa_set_gate_values(uint32_t cv_gates_out);
  * @param pin_num
  * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
  */
-int raspa_request_gpio(int pin_num);
+int raspa_request_out_gpio(int pin_num);
 
 /**
  * @brief Set pin_num gpio in real-time context

@@ -479,7 +479,7 @@ public:
         return _cleanup();
     }
 
-    int request_gpio(int pin_num)
+    int request_out_gpio(int pin_num)
     {
         RtGpio rtgpio_requested;
         rtgpio_requested.num = pin_num;

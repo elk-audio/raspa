@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
         num_samples = num_frames * raspa_get_num_output_channels();
     }
 
-    res = raspa_request_gpio(gpio_pin);
+    res = raspa_request_out_gpio(gpio_pin);
     if (res)
     {
         printf("Failed to get GPIO\n");

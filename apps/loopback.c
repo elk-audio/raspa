@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
     res = raspa_request_out_gpio(gpio_pin);
     if (res)
     {
-        printf("Failed to get GPIO\n");
+        printf("Failed to get gpio\n");
     }
 
     printf("Loopback audio process started.\n");
@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
 
     if (raspa_free_gpio(gpio_pin))
     {
-        printf("gpio free failed \n");
+        printf("Failed to free gpio\n");
     }
 
     raspa_close();

@@ -54,7 +54,11 @@ constexpr int REQUIRED_MIN_VER = 3;
 /**
  * device paths
  */
+#ifdef RASPA_WITH_EVL
+constexpr char DEVICE_NAME[] = "/dev/audio_rtdm";
+#else
 constexpr char DEVICE_NAME[] = "/dev/rtdm/audio_rtdm";
+#endif
 
 // Driver parameter definitions
 constexpr char PARAM_ROOT_PATH[] = "/sys/class/audio_rtdm/";

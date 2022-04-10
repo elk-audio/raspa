@@ -31,11 +31,19 @@
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-#include <cobalt/pthread.h>
-#include <cobalt/sys/ioctl.h>
-#include <cobalt/time.h>
-#include <rtdm/rtdm.h>
-#include <xenomai/init.h>
+#ifdef RASPA_WITH_EVL
+    #include <unistd.h>
+    #include <evl/evl.h>
+    #include <sys/ioctl.h>
+    #include <evl/syscall.h>
+    #include <evl/clock.h>
+#else
+    #include <cobalt/pthread.h>
+    #include <cobalt/sys/ioctl.h>
+    #include <cobalt/time.h>
+    #include <rtdm/rtdm.h>
+    #include <xenomai/init.h>
+#endif
 
 #pragma GCC diagnostic pop
 
@@ -58,6 +66,14 @@
 
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
+#endif
+
+#ifdef RASPA_WITH_EVL
+    #define __RASPA_IOCTL_RT(call)		oob_ ## call
+    #define __RASPA(call)		        call
+#else
+    #define __RASPA_IOCTL_RT(call)		__cobalt_ ## call
+    #define __RASPA(call)		        __cobalt_ ## call
 #endif
 
 /*
@@ -168,6 +184,13 @@ public:
 
     int init()
     {
+#ifdef RASPA_WITH_EVL
+        auto res = evl_init();
+		if (res)
+        {
+            return res;
+        }
+#else
         /*
          * Fake command line arguments to pass to xenomai_init(). For some
          * obscure reasons, xenomai_init() crashes if argv is allocated here on
@@ -203,7 +226,6 @@ public:
         optind = 1;
 
         xenomai_init(&argc, (char* const**) &argv);
-        _kernel_buffer_mem_size = NUM_PAGES_KERNEL_MEM * getpagesize();
 
         for (int i = 0; i < argc; i++)
         {
@@ -218,11 +240,13 @@ public:
             _raspa_error_code.set_error_val(RASPA_EMLOCKALL, res);
             return -RASPA_EMLOCKALL;
         }
+#endif
+        _kernel_buffer_mem_size = NUM_PAGES_KERNEL_MEM * getpagesize();
 
         return RASPA_SUCCESS;
     }
 
-    int open(int buffer_size,
+    int open_device(int buffer_size,
              RaspaProcessCallback process_callback,
              void* user_data,
              unsigned int debug_flags)
@@ -319,7 +343,7 @@ public:
         struct sched_param rt_params = {
                             .sched_priority = RASPA_PROCESSING_TASK_PRIO};
         pthread_attr_t task_attributes;
-        __cobalt_pthread_attr_init(&task_attributes);
+        pthread_attr_init(&task_attributes);
 
         pthread_attr_setdetachstate(&task_attributes, PTHREAD_CREATE_JOINABLE);
         pthread_attr_setinheritsched(&task_attributes, PTHREAD_EXPLICIT_SCHED);
@@ -341,10 +365,10 @@ public:
         }
 
         // Create rt thread
-        res = __cobalt_pthread_create(&_processing_task,
+        res = __RASPA(pthread_create(&_processing_task,
                                       &task_attributes,
                                       &raspa_pimpl_task_entry,
-                                      this);
+                                      this));
         if (res < 0)
         {
             _cleanup();
@@ -365,7 +389,7 @@ public:
         }
         pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
-        res = __cobalt_ioctl(_device_handle, RASPA_PROC_START);
+        res = __RASPA(ioctl(_device_handle, RASPA_PROC_START));
         if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_ETASK_START, res);
@@ -432,7 +456,12 @@ public:
     {
         RaspaMicroSec time = 0;
         struct timespec tp;
+
+#ifdef RASPA_WITH_EVL
+        auto res = evl_read_clock(EVL_CLOCK_MONOTONIC, &tp);
+#else
         auto res = __cobalt_clock_gettime(CLOCK_MONOTONIC, &tp);
+#endif
         if (res == 0)
         {
             time = (RaspaMicroSec) tp.tv_sec * 1000000 + tp.tv_nsec / 1000;
@@ -457,14 +486,14 @@ public:
         return 0;
     }
 
-    int close()
+    int close_device()
     {
         _stop_request_flag = true;
 
         // Wait sometime for periodic task to send mute command to device
         usleep(STOP_REQUEST_DELAY_US);
 
-        auto res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
+        auto res = __RASPA(ioctl(_device_handle, RASPA_PROC_STOP));
 
         // Wait for driver to stop current transfers.
         usleep(CLOSE_DELAY_US);
@@ -485,14 +514,14 @@ public:
         rtgpio_requested.num = pin_num;
         rtgpio_requested.val = 0;
 
-        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_GET_PIN,
-                                    &rtgpio_requested);
+        auto res = __RASPA(ioctl(_device_handle, RASPA_GPIO_GET_PIN,
+                                    &rtgpio_requested));
         if (res)
         {
             return -RASPA_EGPIO_UNSUPPORTED;
         }
-        res = __cobalt_ioctl(_device_handle, RASPA_GPIO_SET_DIR_OUT,
-                                &rtgpio_requested);
+        res = __RASPA(ioctl(_device_handle, RASPA_GPIO_SET_DIR_OUT,
+                                &rtgpio_requested));
         return 0;
     }
 
@@ -502,8 +531,8 @@ public:
         rtgpio_requested.num = pin_num;
         rtgpio_requested.val = val;
 
-        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_SET_VAL,
-                                    &rtgpio_requested);
+        auto res = __RASPA_IOCTL_RT(ioctl(_device_handle, RASPA_GPIO_SET_VAL,
+                                    &rtgpio_requested));
         if (res)
         {
             return -RASPA_EGPIO_UNSUPPORTED;
@@ -515,8 +544,8 @@ public:
     {
         RtGpio rtgpio_requested;
         rtgpio_requested.num = pin_num;
-        auto res = __cobalt_ioctl(_device_handle, RASPA_GPIO_RELEASE,
-                                    &rtgpio_requested);
+        auto res = __RASPA(ioctl(_device_handle, RASPA_GPIO_RELEASE,
+                                    &rtgpio_requested));
         if (res)
         {
             printf("RASPA_GPIO_RELEASE ret = %d\n", res);
@@ -633,7 +662,8 @@ protected:
     int _open_device()
     {
         _device_opened = false;
-        _device_handle = __cobalt_open(driver_conf::DEVICE_NAME, O_RDWR);
+
+        _device_handle = __RASPA(open(driver_conf::DEVICE_NAME, O_RDWR));
 
         if (_device_handle < 0)
         {
@@ -677,9 +707,8 @@ protected:
     {
         if (_device_opened)
         {
-            auto res = __cobalt_close(_device_handle);
+            auto res = __RASPA(close(_device_handle));
             _device_opened = false;
-
             if (res < 0)
             {
                 _raspa_error_code.set_error_val(RASPA_EDEVICE_CLOSE, res);
@@ -697,13 +726,13 @@ protected:
     int _get_driver_buffers()
     {
         _mmap_initialized = false;
-        auto buffer = __cobalt_mmap(NULL,
+
+        auto buffer = __RASPA(mmap(NULL,
                                     _kernel_buffer_mem_size,
                                     PROT_READ | PROT_WRITE,
                                     MAP_SHARED,
                                     _device_handle,
-                                    0);
-
+                                    0));
         _driver_buffer = static_cast<int32_t*>(buffer);
         if (_driver_buffer == MAP_FAILED)
         {
@@ -920,7 +949,9 @@ protected:
         if (_task_started)
         {
             auto res = pthread_cancel(_processing_task);
-            res |= __cobalt_pthread_join(_processing_task, NULL);
+
+            res |= __RASPA(pthread_join(_processing_task, NULL));
+
             _task_started = false;
             if (res < 0)
             {
@@ -1118,7 +1149,8 @@ protected:
     {
         while (true)
         {
-            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                                RASPA_IRQ_WAIT));
             if (buf_idx < 0)
             {
                 // TODO: think how to handle this. Error here means something
@@ -1129,8 +1161,12 @@ protected:
 
             if (_break_on_mode_sw && _interrupts_counter > 1)
             {
+#ifdef RASPA_WITH_EVL
+                // todo use evl_set_thread_mode()
+#else
                 pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
                 _break_on_mode_sw = 0;
+#endif
             }
 
             // clear driver buffers if stop is requested
@@ -1146,7 +1182,8 @@ protected:
                 *_driver_cv_out = _user_gate_out;
             }
 
-            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            __RASPA_IOCTL_RT(ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                                    NULL));
             _interrupts_counter++;
         }
     }
@@ -1158,7 +1195,8 @@ protected:
     {
         while (true)
         {
-            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                            RASPA_IRQ_WAIT));
             if (buf_idx < 0)
             {
                 break;
@@ -1166,8 +1204,12 @@ protected:
 
             if (_break_on_mode_sw && _interrupts_counter > 1)
             {
+#ifdef RASPA_WITH_EVL
+                // todo use evl_set_thread_mode()
+#else
                 pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
                 _break_on_mode_sw = 0;
+#endif
             }
 
             // Store CV gate in
@@ -1181,7 +1223,8 @@ protected:
             // Set gate out info in tx packet
             audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
 
-            __cobalt_ioctl(_device_handle, RASPA_USERPROC_FINISHED, NULL);
+            __RASPA_IOCTL_RT(ioctl(_device_handle, RASPA_USERPROC_FINISHED,
+                                    NULL));
             _interrupts_counter++;
         };
     }
@@ -1194,7 +1237,8 @@ protected:
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
-            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                                    RASPA_IRQ_WAIT));
             if (buf_idx < 0)
             {
                 break;
@@ -1209,16 +1253,17 @@ protected:
             _parse_rx_pkt(_rx_pkt[buf_idx]);
             _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
 
-            __cobalt_ioctl(_device_handle,
+            __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,
-                           &correction_ns);
+                           &correction_ns));
             _interrupts_counter++;
         }
 
         // main run time loop
         while (true)
         {
-            auto buf_idx = __cobalt_ioctl(_device_handle, RASPA_IRQ_WAIT);
+            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                                RASPA_IRQ_WAIT));
             if (buf_idx < 0)
             {
                 break;
@@ -1241,9 +1286,9 @@ protected:
             // Set gate out info in tx packet
             audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
 
-            __cobalt_ioctl(_device_handle,
+            __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,
-                           &correction_ns);
+                           &correction_ns));
             _interrupts_counter++;
         }
     }

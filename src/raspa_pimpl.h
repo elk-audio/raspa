@@ -28,6 +28,8 @@
 #include <sched.h>
 #include <sys/mman.h>
 #include <sys/sysinfo.h>
+#include <error.h>
+#include <errno.h>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
@@ -91,9 +93,9 @@ namespace raspa {
  *
  */
 typedef struct rt_gpio {
-	int num;
-	int dir;
-	int val;
+    int num;
+    int dir;
+    int val;
 } RtGpio;
 
 // Delay in microseconds to wait for audio driver to close and stop its thread.
@@ -184,13 +186,7 @@ public:
 
     int init()
     {
-#ifdef RASPA_WITH_EVL
-        auto res = evl_init();
-		if (res)
-        {
-            return res;
-        }
-#else
+#ifndef RASPA_WITH_EVL
         /*
          * Fake command line arguments to pass to xenomai_init(). For some
          * obscure reasons, xenomai_init() crashes if argv is allocated here on
@@ -1149,13 +1145,10 @@ protected:
     {
         while (true)
         {
-            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
-                                                RASPA_IRQ_WAIT));
-            if (buf_idx < 0)
+            auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                RASPA_IRQ_WAIT, &_buf_idx));
+            if (res)
             {
-                // TODO: think how to handle this. Error here means something
-                // *bad*, so we might want to de-register the driver, cleanup
-                // and signal user someway.
                 break;
             }
 
@@ -1177,8 +1170,8 @@ protected:
             else
             {
                 _user_gate_in = *_driver_cv_in;
-                _perform_user_callback(_driver_buffer_audio_in[buf_idx],
-                                       _driver_buffer_audio_out[buf_idx]);
+                _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
+                                       _driver_buffer_audio_out[_buf_idx]);
                 *_driver_cv_out = _user_gate_out;
             }
 
@@ -1195,9 +1188,9 @@ protected:
     {
         while (true)
         {
-            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
-                                            RASPA_IRQ_WAIT));
-            if (buf_idx < 0)
+            auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                RASPA_IRQ_WAIT, &_buf_idx));
+            if (res)
             {
                 break;
             }
@@ -1213,20 +1206,21 @@ protected:
             }
 
             // Store CV gate in
-            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
+            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
-            _parse_rx_pkt(_rx_pkt[buf_idx]);
-            _perform_user_callback(_driver_buffer_audio_in[buf_idx],
-                                   _driver_buffer_audio_out[buf_idx]);
-            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
+            _parse_rx_pkt(_rx_pkt[_buf_idx]);
+            _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
+                                   _driver_buffer_audio_out[_buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
 
             // Set gate out info in tx packet
-            audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
+            audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
 
-            __RASPA_IOCTL_RT(ioctl(_device_handle, RASPA_USERPROC_FINISHED,
-                                    NULL));
+            __RASPA_IOCTL_RT(ioctl(_device_handle,
+                           RASPA_USERPROC_FINISHED,
+                           NULL));
             _interrupts_counter++;
-        };
+        }
     }
 
     /**
@@ -1237,58 +1231,66 @@ protected:
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
-            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
-                                                    RASPA_IRQ_WAIT));
-            if (buf_idx < 0)
+            auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                RASPA_IRQ_WAIT, &_buf_idx));
+            if (res)
             {
                 break;
             }
 
             // Timing error
             auto timing_error_ns =
-                                audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
+                                audio_ctrl::get_timing_error(_rx_pkt[_buf_idx]);
             auto correction_ns = _process_timing_error_with_downsampling(
                                 timing_error_ns);
 
-            _parse_rx_pkt(_rx_pkt[buf_idx]);
-            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
+            _parse_rx_pkt(_rx_pkt[_buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
 
-            __RASPA_IOCTL_RT(ioctl(_device_handle,
+            res = __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,
                            &correction_ns));
+            if (res)
+            {
+                break;
+            }
             _interrupts_counter++;
         }
 
         // main run time loop
         while (true)
         {
-            auto buf_idx = __RASPA_IOCTL_RT(ioctl(_device_handle,
-                                                RASPA_IRQ_WAIT));
-            if (buf_idx < 0)
+            auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
+                                RASPA_IRQ_WAIT, &_buf_idx));
+            if (res)
             {
                 break;
             }
 
             // Timing error
             auto timing_error_ns =
-                                audio_ctrl::get_timing_error(_rx_pkt[buf_idx]);
+                                audio_ctrl::get_timing_error(_rx_pkt[_buf_idx]);
             auto correction_ns = _process_timing_error_with_downsampling(
                                 timing_error_ns);
 
             // Store CV gate in
-            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[buf_idx]);
+            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
-            _parse_rx_pkt(_rx_pkt[buf_idx]);
-            _perform_user_callback(_driver_buffer_audio_in[buf_idx],
-                                   _driver_buffer_audio_out[buf_idx]);
-            _get_next_tx_pkt_data(_tx_pkt[buf_idx]);
+            _parse_rx_pkt(_rx_pkt[_buf_idx]);
+            _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
+                                   _driver_buffer_audio_out[_buf_idx]);
+            _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
 
             // Set gate out info in tx packet
-            audio_ctrl::set_gate_out_val(_tx_pkt[buf_idx], _user_gate_out);
+            audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
 
-            __RASPA_IOCTL_RT(ioctl(_device_handle,
+            res = __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,
                            &correction_ns));
+            if (res)
+            {
+                break;
+            }
             _interrupts_counter++;
         }
     }
@@ -1308,6 +1310,7 @@ protected:
     float* _user_audio_out;
     uint32_t _user_gate_in;
     uint32_t _user_gate_out;
+    int _buf_idx;
 
     // device handle identifier
     int _device_handle;
@@ -1362,6 +1365,12 @@ protected:
 static void* raspa_pimpl_task_entry(void* data)
 {
     auto pimpl = static_cast<RaspaPimpl*>(data);
+    int efd = evl_attach_self("/raspa_pimpl_task:%d", getpid());
+    if (efd < 0)
+    {
+        error(1, -efd, "evl_attach_self() failed");
+    }
+
     pimpl->rt_loop();
 
     // To suppress warnings

@@ -8,9 +8,9 @@ project(raspalib)
 # These can be overriden by ccmake, commandline args or using
 # set(BUILD_OPTION <new value> CACHE <type> "") in an including project
 
-option(RASPA_WITH_APPS "Build included applications" OFF)
-option(RASPA_WITH_TESTS "Build and run unit tests" ON)
-option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" OFF)
+option(RASPA_WITH_APPS "Build included applications" ON)
+option(RASPA_WITH_TESTS "Build and run unit tests" OFF)
+option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" ON)
 
 #######################
 #  Cross compilation  #

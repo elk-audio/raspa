@@ -31,7 +31,7 @@
 
 #define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
+#define RASPA_IRQ_WAIT          _IOR(RASPA_IOC_MAGIC, 1, int)
 #define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
 #define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
 #define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)

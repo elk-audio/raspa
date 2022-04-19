@@ -33,12 +33,17 @@
 
 #define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT              _IO(RASPA_IOC_MAGIC, 1)
-#define RASPA_PROC_START            _IO(RASPA_IOC_MAGIC, 3)
-#define RASPA_USERPROC_FINISHED     _IOW(RASPA_IOC_MAGIC, 4, int)
-#define RASPA_PROC_STOP             _IO(RASPA_IOC_MAGIC, 5)
-#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 7, struct driver_conf::ChannelInfo)
-#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 8, struct driver_conf::ChannelInfo)
+#define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
+#define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
+#define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
+#define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)
+#define RASPA_FW_TRANSFER		_IO(RASPA_IOC_MAGIC, 6)
+#define RASPA_GPIO_GET_PIN		_IOW(RASPA_IOC_MAGIC, 7, RtGpio)
+#define RASPA_GPIO_SET_DIR_OUT	_IOW(RASPA_IOC_MAGIC, 8, RtGpio)
+#define RASPA_GPIO_SET_VAL		_IOW(RASPA_IOC_MAGIC, 9, RtGpio)
+#define RASPA_GPIO_RELEASE		_IOW(RASPA_IOC_MAGIC, 10, RtGpio)
+#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct driver_conf::ChannelInfo)
+#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct driver_conf::ChannelInfo)
 
 
 namespace driver_conf {

@@ -25,6 +25,7 @@
 
 #include <memory>
 #include <utility>
+#include <cstring>
 
 #include "driver_config.h"
 
@@ -45,10 +46,45 @@ constexpr float INT32_TO_FLOAT_SCALING_FACTOR =
                     4.656612875e-10f;  // 1.0 / (2**31 - 1)
 
 constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
-constexpr int MIN_NUM_CHANNELS = 2;
-constexpr int MAX_NUM_CHANNELS = 8;
-constexpr int MIN_BUFFER_SIZE = 8;
-constexpr int MAX_BUFFER_SIZE = 1024;
+constexpr int SUPPORTED_BUFFER_SIZES[] = {8, 16, 32, 48, 64, 128, 192, 256, 512};
+
+// Macro to iterate through all possible buffer size and stride combinations and return the right instantiation of
+// the sample converter
+#define GET_CONVERTER_WITH_BUFFER_SIZE(format, buffer_size, stride, sw_chan_id, hw_chan_start_index)     \
+switch (buffer_size)                                                                                     \
+{                                                                                                        \
+    case 8:                                                                                              \
+        return std::make_unique<SampleConverter<format, 8>>(stride, sw_chan_id, hw_chan_start_index);    \
+        break;                                                                                           \
+    case 16:                                                                                             \
+        return std::make_unique<SampleConverter<format, 16>>(stride, sw_chan_id, hw_chan_start_index);   \
+        break;                                                                                           \
+    case 32:                                                                                             \
+        return std::make_unique<SampleConverter<format, 32>>(stride, sw_chan_id, hw_chan_start_index);   \
+        break;                                                                                           \
+    case 48:                                                                                             \
+        return std::make_unique<SampleConverter<format, 48>>(stride, sw_chan_id, hw_chan_start_index);   \
+        break;                                                                                           \
+    case 64:                                                                                             \
+        return std::make_unique<SampleConverter<format, 64>>(stride, sw_chan_id, hw_chan_start_index);   \
+        break;                                                                                           \
+    case 128:                                                                                            \
+        return std::make_unique<SampleConverter<format, 128>>(stride, sw_chan_id, hw_chan_start_index);  \
+        break;                                                                                           \
+    case 192:                                                                                            \
+        return std::make_unique<SampleConverter<format, 192>>(stride, sw_chan_id, hw_chan_start_index);  \
+        break;                                                                                           \
+    case 256:                                                                                            \
+        return std::make_unique<SampleConverter<format, 256>>(stride, sw_chan_id, hw_chan_start_index);  \
+        break;                                                                                           \
+    case 512:                                                                                            \
+        return std::make_unique<SampleConverter<format, 512>>(stride, sw_chan_id, hw_chan_start_index);  \
+        break;                                                                                           \
+                                                                                                         \
+default:                                                                                                 \
+    return std::unique_ptr<BaseSampleConverter>(nullptr);                                                \
+    break;                                                                                               \
+}                                                                                                        \
 
 /**
  * @brief Interface class for sample conversion
@@ -79,56 +115,74 @@ public:
 };
 
 /**
- * @brief Templated class which performs optimized sample conversion. The
- *        optimization comes from the fact that the template parameters control
- *        the inner and outer loops.
+ * @brief Templated class which performs optimized sample conversion from codec
+ *        format to float and vice versa. It only operates on a single sw channel
+ *        and hw channel and can convert them back and forth
  * @tparam codec_format The codec format.
  * @tparam buffer_size_in_frames The buffer size in frames
- * @tparam num_channels The number of channels
  */
 template<driver_conf::CodecFormat codec_format,
-         int buffer_size_in_frames,
-         int num_channels>
+         int buffer_size_in_frames>
 class SampleConverter : public BaseSampleConverter
 {
 public:
-    SampleConverter() = default;
+    /**
+     * @brief Construct a new Input Sample Converter object.
+     *
+     * @param chan_stride THe number of words between each sample of a channel
+     * @param sw_chan_id Represents which sw channel this sample converter is
+     *                   responsible for.
+     * @param hw_chan_start_index The index of the first sample of the hw channel in the
+     *                    integer buffer
+     */
+    SampleConverter(int chan_stride, int sw_chan_id, int hw_chan_start_index) :
+                                    _hw_chan_start_index(hw_chan_start_index),
+                                    _chan_stride(chan_stride)
+    {
+        _sw_chan_start_index = sw_chan_id * buffer_size_in_frames;
+    }
 
     ~SampleConverter() = default;
 
     /**
      * @brief deinterleaves samples and converts it from the native codec format
      *        to float32
-     * @param dst The destination buffer which holds the float samples
+     * @param dst The destination buffer which holds the float samples of all the channels
      * @param src The source buffer which holds samples in native codec format
      */
     void codec_format_to_float32n(float* dst, int32_t* src) override
     {
+        int hw_chan_index = _hw_chan_start_index;
+
         for (int n = 0; n < buffer_size_in_frames; n++)
         {
-            for (int k = 0; k < num_channels; k++)
+            if constexpr (codec_format == driver_conf::CodecFormat::BINARY)
             {
-                auto sample = _codec_format_to_int32(*src++);
-                dst[(k * buffer_size_in_frames) + n] =
-                                    _int32_to_float32n(sample);
+                // if codec data is raw binary, directly write it into float buffer
+                std::memcpy(&dst[_sw_chan_start_index + n], &src[hw_chan_index], sizeof(int32_t));
+            }
+            else
+            {
+                auto sample = _codec_format_to_int32(src[hw_chan_index]);
+                dst[_sw_chan_start_index + n] = _int32_to_float32n(sample);
+                hw_chan_index += _chan_stride;
             }
         }
     }
 
-    /**
-     * @brief Interleaves samples and converts it from float32 to the codec's
-     *        native format.
-     * @param dst The destination buffer which holds the samples in native codec
-     *        format
-     * @param src The source buffer which holds samples in float32 format
-     */
     void float32n_to_codec_format(int32_t* dst, float* src) override
     {
-        for (int k = 0; k < num_channels; k++)
+        auto hw_chan_index = _hw_chan_start_index;
+        for (int n = 0; n < buffer_size_in_frames; n++)
         {
-            for (int n = 0; n < buffer_size_in_frames; n++)
+            if constexpr (codec_format == driver_conf::CodecFormat::BINARY)
             {
-                float x = *src++;
+                // if data is raw binary, directly write it into int buffer
+                std::memcpy(&dst[_hw_chan_start_index + (n * _chan_stride)], src, sizeof(int32_t));
+            }
+            else
+            {
+                float x = src[_sw_chan_start_index + n];
 
                 if (x < -1.0f)
                 {
@@ -140,7 +194,9 @@ public:
                 }
 
                 auto sample = _float32n_to_int32(x);
-                dst[(n * num_channels) + k] = _int32_to_codec_format(sample);
+                dst[hw_chan_index] = _int32_to_codec_format(sample);
+                hw_chan_index += _chan_stride;
+
             }
         }
     }
@@ -183,38 +239,8 @@ private:
         else
         {
             /**
-             * When codec format is either INT24_32 or INT32, the samples are
+             * When codec format is either INT24_32/INT32/binary, the samples are
              * already 32 bits.
-             */
-            return sample;
-        }
-    }
-
-    /**
-     * @brief Converts sample in int32 format to native codec format. If the
-     *        sample resolution is 24 bits, then the data is left justified.
-     * @param sample The sample in int32 format
-     * @return The sample in native codec format
-     */
-    int32_t _int32_to_codec_format(int32_t sample)
-    {
-        if constexpr (codec_format == driver_conf::CodecFormat::INT24_LJ)
-        {
-            return sample << 8;
-        }
-        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_I2S)
-        {
-            return (sample << 7) & 0x7FFFFF00;
-        }
-        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_RJ)
-        {
-            return sample & 0x00FFFFFF;
-        }
-        else
-        {
-            /**
-             * When codec format is either INT24_32 or INT32, the samples are
-             * already the same as the codec format.
              */
             return sample;
         }
@@ -242,6 +268,36 @@ private:
     }
 
     /**
+     * @brief Converts sample in int32 format to native codec format. If the
+     *        sample resolution is 24 bits, then the data is left justified.
+     * @param sample The sample in int32 format
+     * @return The sample in native codec format
+     */
+    int32_t _int32_to_codec_format(int32_t sample)
+    {
+        if constexpr (codec_format == driver_conf::CodecFormat::INT24_LJ)
+        {
+            return sample << 8;
+        }
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_I2S)
+        {
+            return (sample << 7) & 0x7FFFFF80;
+        }
+        else if constexpr (codec_format == driver_conf::CodecFormat::INT24_RJ)
+        {
+            return sample & 0x00FFFFFF;
+        }
+        else
+        {
+            /**
+             * When codec format is either INT24_32 or INT32, the samples are
+             * already the same as the codec format.
+             */
+            return sample;
+        }
+    }
+
+    /**
      * @brief Converts a float sample to integer by taking into account the
      *        codec data resolution in bits.
      *
@@ -260,131 +316,63 @@ private:
             return static_cast<int32_t>(sample * FLOAT_TO_INT24_SCALING_FACTOR);
         }
     }
+
+    int _hw_chan_start_index;
+    int _sw_chan_start_index;
+    int _chan_stride;
 };
 
 /**
- * @brief Gets the next supported buffer size
- * @param buffer_size the current buffer size
- * @return {true, next buffer size} if current buffer size is not equal to the
- *         maximum allowed buffer size.
- *         {false, current buffer size} otherwise
- */
-constexpr std::pair<bool, int> get_next_buffer_size(int buffer_size)
-{
-    if (buffer_size != MAX_BUFFER_SIZE)
-    {
-        return {true, buffer_size * 2};
-    }
-
-    return {false, buffer_size};
-}
-
-/**
- * @brief Gets the next supported number of channels
- * @param num_channels the current number of channels
- * @return {true, next number of channels} if current number of channels is not
- *         equal to the maximum allowed number of channels.
- *         {false, current number of channels} otherwise
- */
-constexpr std::pair<bool, int> get_next_num_channels(int num_channels)
-{
-    if (num_channels != MAX_NUM_CHANNELS)
-    {
-        return {true, num_channels + 2};
-    }
-
-    return {false, num_channels};
-}
-
-/**
- * @brief Gets the next supported codec format
- * @param codec_format the current codec format
- * @return {true, next codec format} if current number codec format is not
- *         equal to the last possible CodecFormat.
- *         {false, current codec format} otherwise
- */
-constexpr std::pair<bool, driver_conf::CodecFormat>
-get_next_codec_format(driver_conf::CodecFormat codec_format)
-{
-    if (codec_format != driver_conf::CodecFormat::INT32)
-    {
-        return {true,
-                static_cast<driver_conf::CodecFormat>(
-                                    static_cast<int>(codec_format) + 1)};
-    }
-
-    return {false, codec_format};
-}
-
-/**
- * @brief Get a pointer to an instance of a BaseSampleConvertor object. This
- *        function deduces the template arguments for SampleConverter and
- *        instantiates it for the  following argument values:
- *            - buffer sizes : 8, 16, 32, 64, 128, 256, 512, 1024
- *            - number of channels :  2, 4, 6, 8
- *            - Codec formats : INT24_LJ, INT24_I2S, INT24_RJ, INT32_RJ
+ * @brief Iterate through all possible combinations of buffer size, codec format
+ *        and channel strides and return the right instantiation of the sample
+ *        converter
+ *
  * @param codec_format The codec format
  * @param buffer_size_in_frames The buffer size in frames
- * @param num_channels The number of channels.
- * @return A SampleConverter instance if buffer size and num channels
- *         is supported, empty unique_ptr otherwise.
+ * @param chan_stride The stride between samples of the same channel in the buffer
+ *                    i.e the spacing between samples
+ * @param sw_chan_id The sw chan id
+ *  - after int to float conversion, the resulting sample will be put in the float_buffer[sw_chan_id].
+ *   -for float t0 int conversion, samples are taken from float_buffer[sw_chan_id]
+ * @param hw_chan_start_index The index in the integer buffer where the first sample of the channel is
+ * @return std::unique_ptr<BaseSampleConverter> Instance to SampleConverter
  */
-template<driver_conf::CodecFormat expected_format = DEFAULT_CODEC_FORMAT,
-         int expected_buffer_size = MIN_BUFFER_SIZE,
-         int expected_num_chans = MIN_NUM_CHANNELS>
-std::unique_ptr<BaseSampleConverter>
-get_sample_converter(driver_conf::CodecFormat codec_format,
-                     int buffer_size_in_frames,
-                     int num_channels)
+std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecFormat codec_format,
+                                                          int buffer_size_in_frames,
+                                                          int chan_stride,
+                                                          int sw_chan_id,
+                                                          int hw_chan_start_index)
 {
-    if (codec_format != expected_format)
+    switch (codec_format)
     {
-        constexpr auto next_format = get_next_codec_format(expected_format);
-        if constexpr (next_format.first)
-        {
-            return get_sample_converter<next_format.second>(
-                                codec_format,
-                                buffer_size_in_frames,
-                                num_channels);
-        }
+    case driver_conf::CodecFormat::INT24_LJ:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_LJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
 
+    case driver_conf::CodecFormat::INT24_I2S:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_I2S, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
+
+    case driver_conf::CodecFormat::INT24_RJ:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_RJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
+
+    case driver_conf::CodecFormat::INT24_32RJ:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_32RJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
+
+    case driver_conf::CodecFormat::INT32:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT32, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
+
+    case driver_conf::CodecFormat::BINARY:
+        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::BINARY, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        break;
+
+    default:
         return std::unique_ptr<BaseSampleConverter>(nullptr);
+        break;
     }
-
-    if (buffer_size_in_frames != expected_buffer_size)
-    {
-        constexpr auto next_buffer_size =
-                            get_next_buffer_size(expected_buffer_size);
-        if constexpr (next_buffer_size.first)
-        {
-            return get_sample_converter<expected_format,
-                                        next_buffer_size.second>(
-                                codec_format,
-                                buffer_size_in_frames,
-                                num_channels);
-        }
-
-        return std::unique_ptr<BaseSampleConverter>(nullptr);
-    }
-
-    if (num_channels != expected_num_chans)
-    {
-        constexpr auto next_num_chans =
-                            get_next_num_channels(expected_num_chans);
-        if constexpr (next_num_chans.first)
-        {
-            return get_sample_converter<expected_format,
-                                        expected_buffer_size,
-                                        next_num_chans.second>
-                            (codec_format, buffer_size_in_frames, num_channels);
-        }
-
-        return std::unique_ptr<BaseSampleConverter>(nullptr);
-    }
-
-    return std::make_unique<SampleConverter<expected_format,
-                                            expected_buffer_size,
-                                            expected_num_chans>>();
 }
 
 }  // namespace raspa

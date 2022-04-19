@@ -29,14 +29,17 @@
 #include <string>
 #include <utility>
 
+#define RASPA_PROCESSING_TASK_PRIO 90
+
 #define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
-#define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
-#define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
-#define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)
+#define RASPA_IRQ_WAIT              _IO(RASPA_IOC_MAGIC, 1)
+#define RASPA_PROC_START            _IO(RASPA_IOC_MAGIC, 3)
+#define RASPA_USERPROC_FINISHED     _IOW(RASPA_IOC_MAGIC, 4, int)
+#define RASPA_PROC_STOP             _IO(RASPA_IOC_MAGIC, 5)
+#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 7, struct driver_conf::ChannelInfo)
+#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 8, struct driver_conf::ChannelInfo)
 
-#define RASPA_PROCESSING_TASK_PRIO 90
 
 namespace driver_conf {
 
@@ -44,7 +47,7 @@ namespace driver_conf {
  * required driver versions
  */
 constexpr int REQUIRED_MAJ_VER = 0;
-constexpr int REQUIRED_MIN_VER = 3;
+constexpr int REQUIRED_MIN_VER = 4;
 
 /**
  * device paths
@@ -75,6 +78,7 @@ enum class CodecFormat : int
     INT24_RJ,      // 24 bit samples right justified. Format : 0x00XXXXXX
     INT24_32RJ,    // 24 bit samples converted into 32 bit samples
     INT32,         // 32 bit samples
+    BINARY,         // No op to be done on samples
     NUM_CODEC_FORMATS
 };
 
@@ -108,6 +112,13 @@ enum class ErrorCode : int
     DEVICE_INACTIVE = 140,
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE
+};
+
+struct ChannelInfo {
+	uint sw_chan_id;
+	uint hw_chan_start_index;
+	uint chan_stride;
+	uint sample_format;
 };
 
 /**

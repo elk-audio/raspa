@@ -84,7 +84,7 @@ constexpr int NUM_PAGES_KERNEL_MEM = 20;
 constexpr int NUM_BUFFERS = 2;
 
 // settling constant for the delay filter
-constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
+constexpr int DELAY_FILTER_SETTLING_CONSTANT = 1000;
 
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
@@ -138,7 +138,6 @@ public:
             _num_output_chans(0),
             _buffer_size_in_frames(0),
             _buffer_size_in_samples(0),
-            _codec_format(driver_conf::CodecFormat::INT24_LJ),
             _device_opened(false),
             _user_buffers_allocated(false),
             _mmap_initialized(false),
@@ -273,10 +272,10 @@ public:
             return res;
         }
 
-        _init_sample_converter();
-        if (!_sample_converter)
+        res = _init_sample_converter();
+        if (res != RASPA_SUCCESS)
         {
-            return -RASPA_EBUFFER_SIZE_SC;
+            return res;
         }
 
         // Delay filter is needed for synchronization
@@ -479,7 +478,6 @@ protected:
         auto sample_rate = driver_conf::get_sample_rate();
         _num_input_chans = driver_conf::get_num_input_chan();
         _num_output_chans = driver_conf::get_num_output_chan();
-        auto codec_format = driver_conf::get_codec_format();
         auto platform_type = driver_conf::get_platform_type();
 
         // sanity checks on the parameters
@@ -501,12 +499,6 @@ protected:
                                             _num_output_chans);
             return -RASPA_EPARAM_OUTPUTCHANS;
         }
-        else if (codec_format < 0)
-        {
-            _raspa_error_code.set_error_val(RASPA_EPARAM_CODEC_FORMAT,
-                                            codec_format);
-            return -RASPA_EPARAM_CODEC_FORMAT;
-        }
         else if (platform_type < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EPARAM_PLATFORM_TYPE,
@@ -515,17 +507,6 @@ protected:
         }
 
         _sample_rate = static_cast<float>(sample_rate);
-
-        // set internal codec format
-        if (codec_format < static_cast<int>(driver_conf::CodecFormat::
-                                                                INT24_LJ) ||
-            codec_format >= static_cast<int>(driver_conf::CodecFormat::
-                                                                 NUM_CODEC_FORMATS))
-        {
-            _raspa_error_code.set_error_val(RASPA_ECODEC_FORMAT, codec_format);
-            return -RASPA_ECODEC_FORMAT;
-        }
-        _codec_format = static_cast<driver_conf::CodecFormat>(codec_format);
 
         // set internal platform type
         if (platform_type < static_cast<int>(driver_conf::PlatformType::
@@ -803,11 +784,54 @@ protected:
     /**
      * @brief Initialize the sample converter instance.
      */
-    void _init_sample_converter()
+    int _init_sample_converter()
     {
-        _sample_converter = get_sample_converter(_codec_format,
-                                                 _buffer_size_in_frames,
-                                                 _num_codec_chans);
+        _input_sample_converter.resize(_num_input_chans);
+        _output_sample_converter.resize(_num_output_chans);
+
+        struct driver_conf::ChannelInfo chan_info;
+
+        for (int i = 0; i < _num_input_chans; i++)
+        {
+            chan_info.sw_chan_id = i;
+            __cobalt_ioctl(_device_handle,
+                           RASPA_GET_INPUT_CHAN_INFO,
+                           &chan_info);
+
+            auto format = static_cast<driver_conf::CodecFormat>(chan_info.sample_format);
+            _input_sample_converter[i] = get_sample_converter(format,
+                                                              _buffer_size_in_frames,
+                                                              chan_info.chan_stride,
+                                                              i,
+                                                              chan_info.hw_chan_start_index);
+
+            if (!_input_sample_converter[i])
+            {
+                return -RASPA_EBUFFER_SIZE_SC;
+            }
+        }
+
+        for (int i = 0; i < _num_output_chans; i++)
+        {
+            chan_info.sw_chan_id = i;
+            __cobalt_ioctl(_device_handle,
+                           RASPA_GET_OUTPUT_CHAN_INFO,
+                           &chan_info);
+
+            auto format = static_cast<driver_conf::CodecFormat>(chan_info.sample_format);
+            _output_sample_converter[i] = get_sample_converter(format,
+                                                          _buffer_size_in_frames,
+                                                          chan_info.chan_stride,
+                                                          i,
+                                                          chan_info.hw_chan_start_index);
+
+            if (!_output_sample_converter[i])
+            {
+                return -RASPA_EBUFFER_SIZE_SC;
+            }
+        }
+
+        return RASPA_SUCCESS;
     }
 
     /**
@@ -836,7 +860,17 @@ protected:
      */
     void _deinit_sample_converter()
     {
-        _sample_converter.reset();
+        for (auto& converter : _input_sample_converter)
+        {
+            converter.reset();
+        }
+        _input_sample_converter.clear();
+
+        for (auto& converter : _output_sample_converter)
+        {
+            converter.reset();
+        }
+        _output_sample_converter.clear();
     }
 
     /**
@@ -962,11 +996,19 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
-        _sample_converter->codec_format_to_float32n(_user_audio_in,
-                                                    input_samples);
+
+        for (int i = 0; i < _num_input_chans; i++)
+        {
+            _input_sample_converter[i]->codec_format_to_float32n(_user_audio_in,
+                                                                input_samples);
+        }
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
-        _sample_converter->float32n_to_codec_format(output_samples,
-                                                    _user_audio_out);
+
+        for (int i = 0; i < _num_output_chans; i++)
+        {
+            _output_sample_converter[i]->float32n_to_codec_format(output_samples,
+                                                        _user_audio_out);
+        }
     }
 
     /**
@@ -1227,8 +1269,9 @@ protected:
     int _num_output_chans;
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;
-    driver_conf::CodecFormat _codec_format;
-    std::unique_ptr<BaseSampleConverter> _sample_converter;
+
+    std::vector<std::unique_ptr<BaseSampleConverter>> _input_sample_converter;
+    std::vector<std::unique_ptr<BaseSampleConverter>> _output_sample_converter;
 
     // initialization phases
     bool _device_opened;

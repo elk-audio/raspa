@@ -99,6 +99,13 @@ int raspa_get_num_input_channels();
 int raspa_get_num_output_channels();
 
 /**
+ * @brief Get num of USB channels
+ * 
+ * @return int 
+ */
+int raspa_get_num_usb_channels();
+
+/**
  * @brief Starts the real-time Xenomai task to perform audio processing
  *
  * @return 0 in case of success, negative value otherwise. raspa_get_error_msg()

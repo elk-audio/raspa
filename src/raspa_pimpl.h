@@ -56,6 +56,9 @@
 #include "raspa_gpio_com.h"
 #include "sample_conversion.h"
 
+#ifdef RASPA_WITH_ALSA_USB
+    #include "raspa_alsa_usb.h"
+#endif
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
 #endif
@@ -100,6 +103,13 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
+//Num of ALSA USB channels
+#ifdef RASPA_WITH_ALSA_USB
+    constexpr int NUM_ALSA_USB_CHANNELS = 2;
+#else
+    constexpr int NUM_ALSA_USB_CHANNELS = 0;
+#endif
+
 // SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
 
@@ -137,6 +147,8 @@ public:
             _kernel_buffer_mem_size(0),
             _user_audio_in{nullptr},
             _user_audio_out{nullptr},
+            _user_audio_in_usb{nullptr},
+            _user_audio_out_usb{nullptr},
             _user_gate_in(0),
             _user_gate_out(0),
             _device_handle(-1),
@@ -146,7 +158,10 @@ public:
             _sample_rate(0.0),
             _num_codec_chans(0),
             _num_input_chans(0),
+            _num_total_input_chans(0),
             _num_output_chans(0),
+            _num_total_output_chans(0),
+            _num_usb_channels(NUM_ALSA_USB_CHANNELS),
             _buffer_size_in_frames(0),
             _buffer_size_in_samples(0),
             _codec_format(driver_conf::CodecFormat::INT24_LJ),
@@ -305,10 +320,17 @@ public:
             }
         }
 
+#ifdef RASPA_WITH_ALSA_USB
+        res = _init_alsa_usb();
+        if (res)
+        {
+            return -RASPA_EALSA_INIT_FAILED;
+        }
+#endif
+
         _user_data = user_data;
         _interrupts_counter = 0;
         _user_callback = process_callback;
-
         return RASPA_SUCCESS;
     }
 
@@ -372,6 +394,9 @@ public:
             return -RASPA_ETASK_START;
         }
 
+#ifdef RASPA_WITH_ALSA_USB
+        _alsa_usb->start_usb_streams();
+#endif
         return RASPA_SUCCESS;
     }
 
@@ -405,12 +430,17 @@ public:
 
     int get_num_input_channels()
     {
-        return _num_input_chans;
+        return _num_total_input_chans;
+    }
+
+    int get_num_usb_channels()
+    {
+        return _num_usb_channels;
     }
 
     int get_num_output_channels()
     {
-        return _num_output_chans;
+        return _num_total_output_chans;
     }
 
     const char* get_error_msg(int code)
@@ -459,12 +489,15 @@ public:
 
     int close()
     {
+        int res;
         _stop_request_flag = true;
-
+#ifdef RASPA_WITH_ALSA_USB
+        res = _alsa_usb->close();
+#endif
         // Wait sometime for periodic task to send mute command to device
         usleep(STOP_REQUEST_DELAY_US);
 
-        auto res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
+        res = __cobalt_ioctl(_device_handle, RASPA_PROC_STOP);
 
         // Wait for driver to stop current transfers.
         usleep(CLOSE_DELAY_US);
@@ -598,6 +631,8 @@ protected:
         _num_codec_chans = (_num_input_chans > _num_output_chans) ?
                                                _num_input_chans :
                                                _num_output_chans;
+        _num_total_input_chans = _num_input_chans + _num_usb_channels;
+        _num_total_output_chans = _num_output_chans + _num_usb_channels;
 
         return RASPA_SUCCESS;
     }
@@ -823,16 +858,21 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
+        int num_user_audio_samples = _buffer_size_in_samples + 
+                                    _num_usb_channels * _buffer_size_in_frames;
         int res = posix_memalign(reinterpret_cast<void**>(&_user_audio_in),
                                  16,
-                                 _buffer_size_in_samples * sizeof(float)) ||
+                                 num_user_audio_samples * sizeof(float)) ||
                   posix_memalign(reinterpret_cast<void**>(&_user_audio_out),
                                  16,
-                                 _buffer_size_in_samples * sizeof(float));
+                                 num_user_audio_samples * sizeof(float));
 
-        std::fill_n(_user_audio_in, _buffer_size_in_samples, 0);
-        std::fill_n(_user_audio_out, _buffer_size_in_samples, 0);
-
+        std::fill_n(_user_audio_in, num_user_audio_samples, 0);
+        std::fill_n(_user_audio_out, num_user_audio_samples, 0);
+#ifdef RASPA_WITH_ALSA_USB
+        _user_audio_in_usb = _user_audio_in + _buffer_size_in_samples;
+        _user_audio_out_usb = _user_audio_out + _buffer_size_in_samples;
+#endif
         if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EUSER_BUFFERS, res);
@@ -864,6 +904,11 @@ protected:
         _sample_converter = get_sample_converter(_codec_format,
                                                  _buffer_size_in_frames,
                                                  _num_codec_chans);
+#ifdef RASPA_WITH_ALSA_USB
+        _usb_sample_converter = get_sample_converter(_codec_format,
+                                                 _buffer_size_in_frames,
+                                                 _num_usb_channels);
+#endif
     }
 
     /**
@@ -887,12 +932,27 @@ protected:
         return _gpio_com->init();
     }
 
+#ifdef RASPA_WITH_ALSA_USB
+    /**
+     * @brief Init the raspa alsa usb object.
+     *
+     * @return int RASPA_SUCCESS upon success, different error code otherwise.
+     */
+    int _init_alsa_usb()
+    {
+        _alsa_usb = std::make_unique<RaspaAlsaUsb>();
+        int srate = static_cast<int>(_sample_rate);
+        return _alsa_usb->init(srate, _buffer_size_in_frames, _num_usb_channels);
+    }
+#endif
+
     /**
      * @brief De init the sample converter instance.
      */
     void _deinit_sample_converter()
     {
         _sample_converter.reset();
+        _usb_sample_converter.reset();
     }
 
     /**
@@ -939,6 +999,7 @@ protected:
     int _cleanup()
     {
         // The order is very important. Its the reverse order of instantiation,
+        
         auto res = _stop_rt_task();
         _free_user_buffers();
         res |= _release_driver_buffers();
@@ -1010,6 +1071,20 @@ protected:
     }
 
     /**
+     * @brief helper function ro clear input usb samples
+     * 
+     * @param buffer 
+     */
+    template <typename T>
+    void _clear_usb_buffer(T* buffer)
+    {
+        for (int i = 0; i < _buffer_size_in_frames * _num_usb_channels; i++)
+        {
+            buffer[i] = 0;
+        }
+    }
+
+    /**
      * @brief Helper function to perform user callback.
      *
      * @param input_samples The buffer containing input samples from the codec
@@ -1018,11 +1093,31 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
+#ifdef RASPA_WITH_ALSA_USB
+        int32_t* usb_in;
+        if (_alsa_usb->get_usb_input_samples(usb_in))
+        {
+            _clear_usb_buffer<float>(_user_audio_in_usb);
+        }
+        else
+        {
+            _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
+                                                    usb_in);
+            _clear_usb_buffer<int32_t>(usb_in);
+        }
+#endif
         _sample_converter->codec_format_to_float32n(_user_audio_in,
                                                     input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
         _sample_converter->float32n_to_codec_format(output_samples,
                                                     _user_audio_out);
+#ifdef RASPA_WITH_ALSA_USB
+        int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
+        _usb_sample_converter->float32n_to_codec_format(usb_out,
+                                                _user_audio_out_usb);
+        _alsa_usb->put_usb_output_samples(usb_out);
+        _alsa_usb->increment_buf_indices();
+#endif
     }
 
     /**
@@ -1261,6 +1356,8 @@ protected:
     // User buffers for audio
     float* _user_audio_in;
     float* _user_audio_out;
+    float* _user_audio_in_usb;
+    float* _user_audio_out_usb;
     uint32_t _user_gate_in;
     uint32_t _user_gate_out;
 
@@ -1280,11 +1377,15 @@ protected:
     float _sample_rate;
     int _num_codec_chans;
     int _num_input_chans;
+    int _num_total_input_chans;
     int _num_output_chans;
+    int _num_total_output_chans;
+    int _num_usb_channels;
     int _buffer_size_in_frames;
     int _buffer_size_in_samples;
     driver_conf::CodecFormat _codec_format;
     std::unique_ptr<BaseSampleConverter> _sample_converter;
+    std::unique_ptr<BaseSampleConverter> _usb_sample_converter;
 
     // initialization phases
     bool _device_opened;
@@ -1309,6 +1410,11 @@ protected:
 
     // Gpio Comm
     std::unique_ptr<RaspaGpioCom> _gpio_com;
+
+#ifdef RASPA_WITH_ALSA_USB
+    // Raspa ALSA usb
+    std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
+#endif
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

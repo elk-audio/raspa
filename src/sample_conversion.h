@@ -47,8 +47,8 @@ constexpr float INT32_TO_FLOAT_SCALING_FACTOR =
 constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
 constexpr int MIN_NUM_CHANNELS = 2;
 constexpr int MAX_NUM_CHANNELS = 8;
-constexpr int MIN_BUFFER_SIZE = 8;
-constexpr int MAX_BUFFER_SIZE = 1024;
+constexpr int MIN_BUFFER_SIZE = 16;
+constexpr int MAX_BUFFER_SIZE = 128;
 
 /**
  * @brief Interface class for sample conversion

@@ -159,6 +159,31 @@ uint32_t raspa_get_gate_values();
  */
 void raspa_set_gate_values(uint32_t cv_gates_out);
 
+/**
+ * @brief Request a gpio for real-time context handling
+ *
+ * @param pin_num
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_request_out_gpio(int pin_num);
+
+/**
+ * @brief Set pin_num gpio in real-time context
+ *
+ * @param pin_num
+ * @param val
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_set_gpio(int pin_num, int val);
+
+/**
+ * @brief Free the gpios requested
+ *
+ * @param pin_num
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_free_gpio(int pin_num);
+
 #ifdef __cplusplus
 }
 #endif

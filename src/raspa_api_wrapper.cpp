@@ -55,11 +55,6 @@ int raspa_get_num_input_channels()
     return raspa_pimpl.get_num_input_channels();
 }
 
-int raspa_get_num_usb_channels()
-{
-    return raspa_pimpl.get_num_usb_channels();
-}
-
 int raspa_get_num_output_channels()
 {
     return raspa_pimpl.get_num_output_channels();

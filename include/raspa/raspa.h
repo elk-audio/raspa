@@ -29,7 +29,7 @@ extern "C" {
 // defines the api version
 #define RASPA_VERSION_MAJ 0
 #define RASPA_VERSION_MIN 1
-#define RASPA_VERSION_REV 4
+#define RASPA_VERSION_REV 6
 
 /**
  * @brief Convert error codes to human readable strings.
@@ -97,13 +97,6 @@ int raspa_get_num_input_channels();
  * @return The number of output channels if raspa_open() is successful, 0 if not
  */
 int raspa_get_num_output_channels();
-
-/**
- * @brief Get num of USB channels
- * 
- * @return int 
- */
-int raspa_get_num_usb_channels();
 
 /**
  * @brief Starts the real-time Xenomai task to perform audio processing

@@ -33,6 +33,8 @@
 static int num_frames = DEFAULT_NUM_FRAMES;
 static int num_samples = 0;
 static int stop_flag = 0;
+static int num_input_chans = 0;
+static int num_output_chans = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
@@ -55,9 +57,10 @@ void print_usage(char *argv[])
 void process(float* input, float* output, __attribute__((unused)) void* data)
 {
     int i;
-    for (i = 0; i < num_samples; i++)
+    for (i = 0; i < num_frames; i++)
     {
-        *output++ = *input++;
+        output[i + (8 * num_frames)] = input[i + 16*num_frames];
+        output[i + (9 * num_frames)] = input[i + 17*num_frames];
     }
 }
 
@@ -110,6 +113,8 @@ int main(int argc, char *argv[])
     }
 
     // Calculate total num samples
+    num_input_chans = raspa_get_num_input_channels();
+    num_output_chans = raspa_get_num_output_channels();
     if(raspa_get_num_input_channels() > raspa_get_num_output_channels())
     {
         num_samples = num_frames * raspa_get_num_input_channels();

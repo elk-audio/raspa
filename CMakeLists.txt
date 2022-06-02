@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.18)
 project(raspalib)
 
 #################################
@@ -69,11 +69,12 @@ add_xenomai_to_target(raspa)
 
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
-
-target_link_libraries(raspa PRIVATE pthread audio_control_protocol fifo)
-
 set_property(TARGET raspa PROPERTY CXX_STANDARD 17)
 target_compile_options(raspa PRIVATE -Wall -Wextra -ffast-math -feliminate-unused-debug-types -fno-exceptions)
+
+set(RASPALIB_LINKED_LIBS pthread audio_control_protocol fifo asound)
+
+target_link_libraries(raspa PRIVATE ${RASPALIB_LINKED_LIBS})
 
 #############
 #  Install  #

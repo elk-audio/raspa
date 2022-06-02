@@ -50,37 +50,69 @@ constexpr int SUPPORTED_BUFFER_SIZES[] = {8, 16, 32, 48, 64, 128, 192, 256, 512}
 
 // Macro to iterate through all possible buffer size and stride combinations and return the right instantiation of
 // the sample converter
-#define GET_CONVERTER_WITH_BUFFER_SIZE(format, buffer_size, stride, sw_chan_id, hw_chan_start_index)     \
+#define GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, stride)     \
 switch (buffer_size)                                                                                     \
 {                                                                                                        \
     case 8:                                                                                              \
-        return std::make_unique<SampleConverter<format, 8>>(stride, sw_chan_id, hw_chan_start_index);    \
+        return std::make_unique<SampleConverter<8, format, stride>>(sw_chan_id, hw_chan_start_index);    \
         break;                                                                                           \
     case 16:                                                                                             \
-        return std::make_unique<SampleConverter<format, 16>>(stride, sw_chan_id, hw_chan_start_index);   \
+        return std::make_unique<SampleConverter<16, format, stride>>(sw_chan_id, hw_chan_start_index);   \
         break;                                                                                           \
     case 32:                                                                                             \
-        return std::make_unique<SampleConverter<format, 32>>(stride, sw_chan_id, hw_chan_start_index);   \
+        return std::make_unique<SampleConverter<32, format, stride>>(sw_chan_id, hw_chan_start_index);   \
         break;                                                                                           \
     case 48:                                                                                             \
-        return std::make_unique<SampleConverter<format, 48>>(stride, sw_chan_id, hw_chan_start_index);   \
+        return std::make_unique<SampleConverter<48, format, stride>>(sw_chan_id, hw_chan_start_index);   \
         break;                                                                                           \
     case 64:                                                                                             \
-        return std::make_unique<SampleConverter<format, 64>>(stride, sw_chan_id, hw_chan_start_index);   \
+        return std::make_unique<SampleConverter<64, format, stride>>(sw_chan_id, hw_chan_start_index);   \
         break;                                                                                           \
     case 128:                                                                                            \
-        return std::make_unique<SampleConverter<format, 128>>(stride, sw_chan_id, hw_chan_start_index);  \
+        return std::make_unique<SampleConverter<128, format, stride>>(sw_chan_id, hw_chan_start_index);  \
         break;                                                                                           \
     case 192:                                                                                            \
-        return std::make_unique<SampleConverter<format, 192>>(stride, sw_chan_id, hw_chan_start_index);  \
+        return std::make_unique<SampleConverter<192, format, stride>>(sw_chan_id, hw_chan_start_index);  \
         break;                                                                                           \
     case 256:                                                                                            \
-        return std::make_unique<SampleConverter<format, 256>>(stride, sw_chan_id, hw_chan_start_index);  \
+        return std::make_unique<SampleConverter<256, format, stride>>(sw_chan_id, hw_chan_start_index);  \
         break;                                                                                           \
     case 512:                                                                                            \
-        return std::make_unique<SampleConverter<format, 512>>(stride, sw_chan_id, hw_chan_start_index);  \
+        return std::make_unique<SampleConverter<512, format, stride>>(sw_chan_id, hw_chan_start_index);  \
         break;                                                                                           \
                                                                                                          \
+default:                                                                                                 \
+    return std::unique_ptr<BaseSampleConverter>(nullptr);                                                \
+    break;                                                                                               \
+}                                                                                                        \
+
+#define GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size, format, hw_chan_start_index, stride)         \
+switch(stride)                                                                                           \
+{                                                                                                        \
+    case 2:                                                                                              \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 2);         \
+        break;                                                                                           \
+    case 4:                                                                                              \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 4);         \
+        break;                                                                                           \
+    case 6:                                                                                              \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 6);         \
+        break;                                                                                           \
+    case 8:                                                                                              \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 8);         \
+        break;                                                                                           \
+    case 10:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 10);        \
+        break;                                                                                           \
+    case 12:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 12);        \
+        break;                                                                                           \
+    case 14:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 14);        \
+        break;                                                                                           \
+    case 16:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 16);        \
+        break;                                                                                           \
 default:                                                                                                 \
     return std::unique_ptr<BaseSampleConverter>(nullptr);                                                \
     break;                                                                                               \
@@ -118,11 +150,13 @@ public:
  * @brief Templated class which performs optimized sample conversion from codec
  *        format to float and vice versa. It only operates on a single sw channel
  *        and hw channel and can convert them back and forth
+ * @tparam buffer_size_in_frames The buffer size in frames.
  * @tparam codec_format The codec format.
  * @tparam buffer_size_in_frames The buffer size in frames
  */
-template<driver_conf::CodecFormat codec_format,
-         int buffer_size_in_frames>
+template<int buffer_size_in_frames,
+         driver_conf::CodecFormat codec_format,
+         int chan_stride>
 class SampleConverter : public BaseSampleConverter
 {
 public:
@@ -135,9 +169,8 @@ public:
      * @param hw_chan_start_index The index of the first sample of the hw channel in the
      *                    integer buffer
      */
-    SampleConverter(int chan_stride, int sw_chan_id, int hw_chan_start_index) :
-                                    _hw_chan_start_index(hw_chan_start_index),
-                                    _chan_stride(chan_stride)
+    SampleConverter(int sw_chan_id, int hw_chan_start_index) :
+                                    _hw_chan_start_index(hw_chan_start_index)
     {
         _sw_chan_start_index = sw_chan_id * buffer_size_in_frames;
     }
@@ -165,7 +198,7 @@ public:
             {
                 auto sample = _codec_format_to_int32(src[hw_chan_index]);
                 dst[_sw_chan_start_index + n] = _int32_to_float32n(sample);
-                hw_chan_index += _chan_stride;
+                hw_chan_index += chan_stride;
             }
         }
     }
@@ -178,7 +211,7 @@ public:
             if constexpr (codec_format == driver_conf::CodecFormat::BINARY)
             {
                 // if data is raw binary, directly write it into int buffer
-                std::memcpy(&dst[_hw_chan_start_index + (n * _chan_stride)], src, sizeof(int32_t));
+                std::memcpy(&dst[_hw_chan_start_index + (n * chan_stride)], src, sizeof(int32_t));
             }
             else
             {
@@ -195,7 +228,7 @@ public:
 
                 auto sample = _float32n_to_int32(x);
                 dst[hw_chan_index] = _int32_to_codec_format(sample);
-                hw_chan_index += _chan_stride;
+                hw_chan_index += chan_stride;
 
             }
         }
@@ -319,7 +352,6 @@ private:
 
     int _hw_chan_start_index;
     int _sw_chan_start_index;
-    int _chan_stride;
 };
 
 /**
@@ -337,36 +369,36 @@ private:
  * @param hw_chan_start_index The index in the integer buffer where the first sample of the channel is
  * @return std::unique_ptr<BaseSampleConverter> Instance to SampleConverter
  */
-std::unique_ptr<BaseSampleConverter> get_sample_converter(driver_conf::CodecFormat codec_format,
+std::unique_ptr<BaseSampleConverter> get_sample_converter(int sw_chan_id,
                                                           int buffer_size_in_frames,
-                                                          int chan_stride,
-                                                          int sw_chan_id,
-                                                          int hw_chan_start_index)
+                                                          driver_conf::CodecFormat codec_format,
+                                                          int hw_chan_start_index,
+                                                          int chan_stride)
 {
     switch (codec_format)
     {
     case driver_conf::CodecFormat::INT24_LJ:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_LJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::INT24_LJ, hw_chan_start_index, chan_stride);
         break;
 
     case driver_conf::CodecFormat::INT24_I2S:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_I2S, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::INT24_I2S, hw_chan_start_index, chan_stride);
         break;
 
     case driver_conf::CodecFormat::INT24_RJ:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_RJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::INT24_RJ, hw_chan_start_index, chan_stride);
         break;
 
     case driver_conf::CodecFormat::INT24_32RJ:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT24_32RJ, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::INT24_32RJ, hw_chan_start_index, chan_stride);
         break;
 
     case driver_conf::CodecFormat::INT32:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::INT32, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::INT32, hw_chan_start_index, chan_stride);
         break;
 
     case driver_conf::CodecFormat::BINARY:
-        GET_CONVERTER_WITH_BUFFER_SIZE(driver_conf::CodecFormat::BINARY, buffer_size_in_frames, chan_stride, sw_chan_id, hw_chan_start_index);
+        GET_CONVERTER_WITH_STRIDES(sw_chan_id, buffer_size_in_frames, driver_conf::CodecFormat::BINARY, hw_chan_start_index, chan_stride);
         break;
 
     default:

@@ -934,7 +934,7 @@ protected:
 
 
         int chan_id = 0;
-        for (auto& info : input_chan_info)
+        for (const auto& info : input_chan_info)
         {
             auto format_info = driver_conf::check_codec_format(info.sample_format);
             if (!format_info.first)
@@ -958,7 +958,7 @@ protected:
         }
 
         chan_id = 0;
-        for (auto& info : output_chan_info)
+        for (const auto& info : output_chan_info)
         {
             auto format_info = driver_conf::check_codec_format(info.sample_format);
             if (!format_info.first)
@@ -1003,7 +1003,7 @@ protected:
 
             for (int i = 0; i < NUM_ALSA_USB_CHANNELS; i++)
             {
-                _input_usb_sample_converter[i] = 
+                _input_usb_sample_converter[i] =
                                             get_sample_converter(i,
                                                                 _buffer_size_in_frames,
                                                                 ALSA_USB_CODEC_FORMAT,

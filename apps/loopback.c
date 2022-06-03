@@ -57,10 +57,9 @@ void print_usage(char *argv[])
 void process(float* input, float* output, __attribute__((unused)) void* data)
 {
     int i;
-    for (i = 0; i < num_frames; i++)
+    for (i = 0; i < num_samples; i++)
     {
-        output[i + (8 * num_frames)] = input[i + 16*num_frames];
-        output[i + (9 * num_frames)] = input[i + 17*num_frames];
+        *output++ = *input++;
     }
 }
 

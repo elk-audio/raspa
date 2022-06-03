@@ -70,14 +70,10 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
             sample_counter = 0;
         }
 
-        output[i + (2 * num_frames)] = output_sample;
-        output[i + (3 * num_frames)] = output_sample;
-
-        // for (int chan = 0; chan < num_output_chans; chan++)
-        // {
-        //     output[i + (chan * num_frames)] = output_sample;
-        //     //output[i + ( 9 * num_frames)] = output_sample;
-        // }
+        for (int chan = 0; chan < num_output_chans; chan++)
+        {
+            output[i + (chan * num_frames)] = output_sample;
+        }
     }
 }
 

@@ -96,7 +96,7 @@ constexpr int NUM_PAGES_KERNEL_MEM = 20;
 constexpr int NUM_BUFFERS = 2;
 
 // settling constant for the delay filter
-constexpr int DELAY_FILTER_SETTLING_CONSTANT = 1000;
+constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;

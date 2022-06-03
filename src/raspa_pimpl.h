@@ -55,10 +55,8 @@
 #include "raspa_error_codes.h"
 #include "raspa_gpio_com.h"
 #include "sample_conversion.h"
+#include "raspa_alsa_usb.h"
 
-#ifdef RASPA_WITH_ALSA_USB
-    #include "raspa_alsa_usb.h"
-#endif
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
 #endif
@@ -103,13 +101,6 @@ constexpr int DELAY_FILTER_SETTLING_CONSTANT = 100;
 // Down sampling rate for the delay filter
 constexpr int DELAY_FILTER_DOWNSAMPLE_RATE = 16;
 
-//Num of ALSA USB channels
-#ifdef RASPA_WITH_ALSA_USB
-    constexpr int NUM_ALSA_USB_CHANNELS = 2;
-#else
-    constexpr int NUM_ALSA_USB_CHANNELS = 0;
-#endif
-
 // SENSEI socket address
 constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
 
@@ -117,6 +108,9 @@ constexpr char SENSEI_SOCKET[] = "/tmp/sensei";
 constexpr char XENOMAI_ARG_APP_NAME[] = "raspa";
 constexpr char XENOMAI_ARG_CPU_AFFINITY_DUAL_CORE[] = "--cpu-affinity=0,1";
 constexpr char XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE[] = "--cpu-affinity=0,1,2,3";
+
+// Default usb audio type is none
+constexpr driver_conf::UsbAudioType DEFAULT_USB_AUDIO_TYPE = driver_conf::UsbAudioType::NONE;
 
 /**
  * @brief Entry point for the real time thread
@@ -156,14 +150,11 @@ public:
             _stop_request_flag(false),
             _break_on_mode_sw(false),
             _sample_rate(0.0),
-            _num_codec_chans(0),
+            _num_driver_audio_chans(0),
             _num_input_chans(0),
-            _num_total_input_chans(0),
             _num_output_chans(0),
-            _num_total_output_chans(0),
-            _num_usb_channels(NUM_ALSA_USB_CHANNELS),
             _buffer_size_in_frames(0),
-            _buffer_size_in_samples(0),
+            _driver_buffer_size_in_samples(0),
             _codec_format(driver_conf::CodecFormat::INT24_LJ),
             _device_opened(false),
             _user_buffers_allocated(false),
@@ -173,6 +164,7 @@ public:
             _user_callback(nullptr),
             _platform_type(driver_conf::PlatformType::NATIVE),
             _error_filter_process_count(0),
+            _usb_audio_type(DEFAULT_USB_AUDIO_TYPE),
             _audio_packet_seq_num(0)
     {}
 
@@ -320,13 +312,15 @@ public:
             }
         }
 
-#ifdef RASPA_WITH_ALSA_USB
-        res = _init_alsa_usb();
-        if (res)
+        // init alsa usb if driver says UsbAudioType is NATIVE_ALSA
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
-            return -RASPA_EALSA_INIT_FAILED;
+            res = _init_alsa_usb();
+            if (res)
+            {
+                return -RASPA_EALSA_INIT_FAILED;
+            }
         }
-#endif
 
         _user_data = user_data;
         _interrupts_counter = 0;
@@ -394,9 +388,12 @@ public:
             return -RASPA_ETASK_START;
         }
 
-#ifdef RASPA_WITH_ALSA_USB
-        _alsa_usb->start_usb_streams();
-#endif
+        // start alsa usb stream if UsbAudioType is native alsa
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            _alsa_usb->start_usb_streams();
+        }
+
         return RASPA_SUCCESS;
     }
 
@@ -430,17 +427,12 @@ public:
 
     int get_num_input_channels()
     {
-        return _num_total_input_chans;
-    }
-
-    int get_num_usb_channels()
-    {
-        return _num_usb_channels;
+        return _num_input_chans;
     }
 
     int get_num_output_channels()
     {
-        return _num_total_output_chans;
+        return _num_output_chans;
     }
 
     const char* get_error_msg(int code)
@@ -481,7 +473,7 @@ public:
         // TODO - really crude approximation
         if (_sample_rate > 0)
         {
-            return (_buffer_size_in_samples * 1000000) / _sample_rate;
+            return (_driver_buffer_size_in_samples * 1000000) / _sample_rate;
         }
 
         return 0;
@@ -491,9 +483,12 @@ public:
     {
         int res;
         _stop_request_flag = true;
-#ifdef RASPA_WITH_ALSA_USB
-        res = _alsa_usb->close();
-#endif
+
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            res = _alsa_usb->close();
+        }
+
         // Wait sometime for periodic task to send mute command to device
         usleep(STOP_REQUEST_DELAY_US);
 
@@ -570,6 +565,7 @@ protected:
         _num_output_chans = driver_conf::get_num_output_chan();
         auto codec_format = driver_conf::get_codec_format();
         auto platform_type = driver_conf::get_platform_type();
+        auto usb_audio_type = driver_conf::get_usb_audio_type();
 
         // sanity checks on the parameters
         if (sample_rate < 0)
@@ -602,6 +598,12 @@ protected:
                                             platform_type);
             return -RASPA_EPARAM_PLATFORM_TYPE;
         }
+        else if (usb_audio_type < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_USB_AUDIO_TYPE,
+                                            usb_audio_type);
+            return -RASPA_EPARAM_USB_AUDIO_TYPE;
+        }
 
         _sample_rate = static_cast<float>(sample_rate);
 
@@ -627,12 +629,28 @@ protected:
         }
         _platform_type = static_cast<driver_conf::PlatformType>(platform_type);
 
-        // set number of codec channels
-        _num_codec_chans = (_num_input_chans > _num_output_chans) ?
+        // Set usb audio type
+        if (usb_audio_type < static_cast<int>(driver_conf::UsbAudioType::
+                                                                 NONE) ||
+            usb_audio_type > static_cast<int>(driver_conf::UsbAudioType::EXTERNAL_UC))
+        {
+            _raspa_error_code.set_error_val(RASPA_EUSBAUDIO_TYPE,
+                                            usb_audio_type);
+            return -RASPA_EUSBAUDIO_TYPE;
+        }
+        _usb_audio_type = static_cast<driver_conf::UsbAudioType>(usb_audio_type);
+
+        /* number of codec channels which is what is given by the driver */
+        _num_driver_audio_chans = (_num_input_chans > _num_output_chans) ?
                                                _num_input_chans :
                                                _num_output_chans;
-        _num_total_input_chans = _num_input_chans + _num_usb_channels;
-        _num_total_output_chans = _num_output_chans + _num_usb_channels;
+
+        // if raspa is implementing native usb audio, add 2 more "virtual" channels
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            _num_input_chans += NUM_ALSA_USB_CHANNELS;
+            _num_output_chans += NUM_ALSA_USB_CHANNELS;
+        }
 
         return RASPA_SUCCESS;
     }
@@ -799,7 +817,7 @@ protected:
      */
     void _init_driver_buffers()
     {
-        _buffer_size_in_samples = _buffer_size_in_frames * _num_codec_chans;
+        _driver_buffer_size_in_samples = _buffer_size_in_frames * _num_driver_audio_chans;
 
         /* If raspa platform type is not native, then the driver buffers
          * also include space for audio control packet and device control packet.
@@ -812,19 +830,19 @@ protected:
             ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
             _driver_buffer_audio_in[0] = ptr;
 
-            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
             _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
             ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
             _driver_buffer_audio_in[1] = ptr;
 
-            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
             _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
             ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
             _driver_buffer_audio_out[0] = ptr;
 
-            ptr += _buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
             _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
             ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
@@ -834,16 +852,16 @@ protected:
         {
             _driver_buffer_audio_in[0] = _driver_buffer;
             _driver_buffer_audio_in[1] = _driver_buffer +
-                                         _buffer_size_in_samples;
+                                         _driver_buffer_size_in_samples;
 
             _driver_buffer_audio_out[0] = _driver_buffer_audio_in[1] +
-                                          _buffer_size_in_samples;
+                                          _driver_buffer_size_in_samples;
             _driver_buffer_audio_out[1] = _driver_buffer_audio_out[0] +
-                                          _buffer_size_in_samples;
+                                          _driver_buffer_size_in_samples;
 
             _driver_cv_out = reinterpret_cast<uint32_t*>(
                                 _driver_buffer_audio_out[1] +
-                                _buffer_size_in_samples);
+                                _driver_buffer_size_in_samples);
 
             _driver_cv_in = _driver_cv_out + 1;
         }
@@ -858,8 +876,14 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
-        int num_user_audio_samples = _buffer_size_in_samples + 
-                                    _num_usb_channels * _buffer_size_in_frames;
+        int num_user_audio_samples = _driver_buffer_size_in_samples;
+
+        // if UsbAudioType::NATIVE_ALSA, then allocate 2 more "virtual" channels
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            num_user_audio_samples += (NUM_ALSA_USB_CHANNELS * _buffer_size_in_frames);
+        }
+
         int res = posix_memalign(reinterpret_cast<void**>(&_user_audio_in),
                                  16,
                                  num_user_audio_samples * sizeof(float)) ||
@@ -869,10 +893,14 @@ protected:
 
         std::fill_n(_user_audio_in, num_user_audio_samples, 0);
         std::fill_n(_user_audio_out, num_user_audio_samples, 0);
-#ifdef RASPA_WITH_ALSA_USB
-        _user_audio_in_usb = _user_audio_in + _buffer_size_in_samples;
-        _user_audio_out_usb = _user_audio_out + _buffer_size_in_samples;
-#endif
+
+        // fix the right location of the 2 virtual usb channels
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            _user_audio_in_usb = _user_audio_in + _driver_buffer_size_in_samples;
+            _user_audio_out_usb = _user_audio_out + _driver_buffer_size_in_samples;
+        }
+
         if (res < 0)
         {
             _raspa_error_code.set_error_val(RASPA_EUSER_BUFFERS, res);
@@ -903,12 +931,15 @@ protected:
     {
         _sample_converter = get_sample_converter(_codec_format,
                                                  _buffer_size_in_frames,
-                                                 _num_codec_chans);
-#ifdef RASPA_WITH_ALSA_USB
-        _usb_sample_converter = get_sample_converter(_codec_format,
-                                                 _buffer_size_in_frames,
-                                                 _num_usb_channels);
-#endif
+                                                 _num_driver_audio_chans);
+
+        // init the sample converter for the native USB channels
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            _usb_sample_converter = get_sample_converter(ALSA_USB_CODEC_FORMAT,
+                                                    _buffer_size_in_frames,
+                                                    NUM_ALSA_USB_CHANNELS);
+        }
     }
 
     /**
@@ -932,7 +963,6 @@ protected:
         return _gpio_com->init();
     }
 
-#ifdef RASPA_WITH_ALSA_USB
     /**
      * @brief Init the raspa alsa usb object.
      *
@@ -941,10 +971,9 @@ protected:
     int _init_alsa_usb()
     {
         _alsa_usb = std::make_unique<RaspaAlsaUsb>();
-        int srate = static_cast<int>(_sample_rate);
-        return _alsa_usb->init(srate, _buffer_size_in_frames, _num_usb_channels);
+        auto srate = static_cast<int>(_sample_rate);
+        return _alsa_usb->init(srate, _buffer_size_in_frames, NUM_ALSA_USB_CHANNELS);
     }
-#endif
 
     /**
      * @brief De init the sample converter instance.
@@ -999,7 +1028,7 @@ protected:
     int _cleanup()
     {
         // The order is very important. Its the reverse order of instantiation,
-        
+
         auto res = _stop_rt_task();
         _free_user_buffers();
         res |= _release_driver_buffers();
@@ -1034,7 +1063,7 @@ protected:
             audio_ctrl::clear_audio_ctrl_pkt(_tx_pkt[1]);
         }
 
-        for (int i = 0; i < _buffer_size_in_samples; i++)
+        for (int i = 0; i < _driver_buffer_size_in_samples; i++)
         {
             _driver_buffer_audio_out[0][i] = 0;
             _driver_buffer_audio_out[1][i] = 0;
@@ -1076,9 +1105,9 @@ protected:
      * @param buffer 
      */
     template <typename T>
-    void _clear_usb_buffer(T* buffer)
+    void _clear_alsa_usb_buffer(T* buffer)
     {
-        for (int i = 0; i < _buffer_size_in_frames * _num_usb_channels; i++)
+        for (int i = 0; i < _buffer_size_in_frames * NUM_ALSA_USB_CHANNELS; i++)
         {
             buffer[i] = 0;
         }
@@ -1093,31 +1122,35 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
-#ifdef RASPA_WITH_ALSA_USB
-        int32_t* usb_in;
-        if (_alsa_usb->get_usb_input_samples(usb_in))
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
-            _clear_usb_buffer<float>(_user_audio_in_usb);
+            int32_t* usb_in;
+            if (_alsa_usb->get_usb_input_samples(usb_in))
+            {
+                _clear_alsa_usb_buffer<float>(_user_audio_in_usb);
+            }
+            else
+            {
+                _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
+                                                        usb_in);
+                _clear_alsa_usb_buffer<int32_t>(usb_in);
+            }
         }
-        else
-        {
-            _usb_sample_converter->codec_format_to_float32n(_user_audio_in_usb,
-                                                    usb_in);
-            _clear_usb_buffer<int32_t>(usb_in);
-        }
-#endif
+
         _sample_converter->codec_format_to_float32n(_user_audio_in,
                                                     input_samples);
         _user_callback(_user_audio_in, _user_audio_out, _user_data);
         _sample_converter->float32n_to_codec_format(output_samples,
                                                     _user_audio_out);
-#ifdef RASPA_WITH_ALSA_USB
-        int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
-        _usb_sample_converter->float32n_to_codec_format(usb_out,
-                                                _user_audio_out_usb);
-        _alsa_usb->put_usb_output_samples(usb_out);
-        _alsa_usb->increment_buf_indices();
-#endif
+
+        if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
+        {
+            int32_t* usb_out = _alsa_usb->get_usb_out_buffer_for_raspa();
+            _usb_sample_converter->float32n_to_codec_format(usb_out,
+                                                    _user_audio_out_usb);
+            _alsa_usb->put_usb_output_samples(usb_out);
+            _alsa_usb->increment_buf_indices();
+        }
     }
 
     /**
@@ -1375,14 +1408,11 @@ protected:
 
     // audio buffer parameters
     float _sample_rate;
-    int _num_codec_chans;
+    int _num_driver_audio_chans;
     int _num_input_chans;
-    int _num_total_input_chans;
     int _num_output_chans;
-    int _num_total_output_chans;
-    int _num_usb_channels;
     int _buffer_size_in_frames;
-    int _buffer_size_in_samples;
+    int _driver_buffer_size_in_samples;
     driver_conf::CodecFormat _codec_format;
     std::unique_ptr<BaseSampleConverter> _sample_converter;
     std::unique_ptr<BaseSampleConverter> _usb_sample_converter;
@@ -1411,10 +1441,8 @@ protected:
     // Gpio Comm
     std::unique_ptr<RaspaGpioCom> _gpio_com;
 
-#ifdef RASPA_WITH_ALSA_USB
-    // Raspa ALSA usb
+    driver_conf::UsbAudioType _usb_audio_type;
     std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
-#endif
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

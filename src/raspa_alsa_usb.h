@@ -23,6 +23,8 @@
 #include <alsa/asoundlib.h>
 #include <fifo/circularfifo_memory_relaxed_aquire_release.h>
 
+#include "driver_config.h"
+
 namespace {
     // Device name of the USB audio gadget listed by ALSA
     constexpr char RASPA_USB_ALSA_DEVICE[] = "hw:0,0";
@@ -45,6 +47,18 @@ typedef enum
     PLAYBACK = 0,
     CAPTURE = 1,
 } UsbStream;
+
+//Num of ALSA USB channels is hardcoded to 2 inputs and 2 outputs
+constexpr int NUM_ALSA_USB_CHANNELS = 2;
+
+// snd_pcm_format_t is set to SND_PCM_FORMAT_S32_LE which is equivalent to INT32
+constexpr snd_pcm_format_t ALSA_USB_SND_PCM_FORMAT = SND_PCM_FORMAT_S32_LE;
+constexpr driver_conf::CodecFormat ALSA_USB_CODEC_FORMAT = driver_conf::CodecFormat::INT32;
+
+// check to ensure that pcm format and codec format are not changed
+static_assert(ALSA_USB_SND_PCM_FORMAT == SND_PCM_FORMAT_S32_LE &&
+              ALSA_USB_CODEC_FORMAT == driver_conf::CodecFormat::INT32,
+              " Invalid ALSA pcm format and equivalent codec format");
 
 class RaspaAlsaUsb
 {
@@ -473,7 +487,7 @@ private:
     int _raspa_out_buf_idx = 0; //increments every raspa buffer size
     int _raspa_in_buf_idx = 0; //increments every raspa buffer size
 
-    snd_pcm_format_t _snd_format = SND_PCM_FORMAT_S32_LE;
+    snd_pcm_format_t _snd_format = ALSA_USB_SND_PCM_FORMAT;
     snd_pcm_uframes_t _alsa_buffer_size_frames = 0;
     snd_pcm_uframes_t _alsa_period_size_frames = 0;
     snd_pcm_hw_params_t *_snd_hw_params = nullptr;

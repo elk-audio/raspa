@@ -46,10 +46,12 @@
 namespace driver_conf {
 
 /**
- * required driver versions
+ * required driver API versions. Rev version of driver is not relevant. Major
+ * and minor versions dictate the support for the various IOCTLS and sysfs
+ * params
  */
 constexpr int REQUIRED_MAJ_VER = 0;
-constexpr int REQUIRED_MIN_VER = 3;
+constexpr int REQUIRED_MIN_VER = 4;
 
 /**
  * device paths
@@ -68,6 +70,7 @@ constexpr char BUFFER_SIZE_PARAM[] = "audio_buffer_size";
 constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
 constexpr char MAJ_VER_PARAM[] = "audio_rtdm_ver_maj";
 constexpr char MIN_VER_PARAM[] = "audio_rtdm_ver_min";
+constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
 
 /**
  * @brief Enumeration to denote various codec sample formats
@@ -113,6 +116,20 @@ enum class ErrorCode : int
     DEVICE_INACTIVE = 140,
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE
+};
+
+/**
+ * @brief Enumeration of USB audio implementations that the driver informs RASPA
+ *        NONE : No usb audio
+ *        NATIVE_ALSA : USB audio is performed by RASPA using alsa subsystem
+ *        EXTERNAL_UC : External microcontroller handles USB audio. RASPA does
+ *        not have to do anything for this kind of types
+ */
+enum class UsbAudioType : int
+{
+    NONE = 1,
+    NATIVE_ALSA,
+    EXTERNAL_UC
 };
 
 /**
@@ -208,6 +225,16 @@ int get_platform_type()
 int get_buffer_size()
 {
     return read_driver_param(BUFFER_SIZE_PARAM);
+}
+
+/**
+ * @brief Get the usb audio type param from the driver
+ *
+ * @return int one of UsbAudioType
+ */
+int get_usb_audio_type()
+{
+    return read_driver_param(USB_AUDIO_TYPE_PARAM);
 }
 
 /**

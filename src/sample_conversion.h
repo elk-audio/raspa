@@ -134,7 +134,7 @@ public:
      * @param dst The destination buffer which holds the float samples
      * @param src The source buffer which holds samples in native codec format
      */
-    virtual void codec_format_to_float32n(float* dst, int32_t* src) = 0;
+    virtual void codec_format_to_float32n(float* dst, const int32_t* src) = 0;
 
     /**
      * @brief Interleaves samples and converts it from float32 to the codec's
@@ -143,7 +143,7 @@ public:
      *        format
      * @param src The source buffer which holds samples in float32 format
      */
-    virtual void float32n_to_codec_format(int32_t* dst, float* src) = 0;
+    virtual void float32n_to_codec_format(int32_t* dst, const float* src) = 0;
 };
 
 /**
@@ -183,7 +183,7 @@ public:
      * @param dst The destination buffer which holds the float samples of all the channels
      * @param src The source buffer which holds samples in native codec format
      */
-    void codec_format_to_float32n(float* dst, int32_t* src) override
+    void codec_format_to_float32n(float* dst, const int32_t* src) override
     {
         int hw_chan_index = _hw_chan_start_index;
 
@@ -203,7 +203,7 @@ public:
         }
     }
 
-    void float32n_to_codec_format(int32_t* dst, float* src) override
+    void float32n_to_codec_format(int32_t* dst, const float* src) override
     {
         auto hw_chan_index = _hw_chan_start_index;
         for (int n = 0; n < buffer_size_in_frames; n++)

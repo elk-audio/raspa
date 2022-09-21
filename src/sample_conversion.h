@@ -211,7 +211,7 @@ public:
             if constexpr (codec_format == driver_conf::CodecFormat::BINARY)
             {
                 // if data is raw binary, directly write it into int buffer
-                std::memcpy(&dst[_hw_chan_start_index + (n * chan_stride)], src, sizeof(int32_t));
+                std::memcpy(&dst[_hw_chan_start_index + (n * chan_stride)], &src[_sw_chan_start_index + n], sizeof(int32_t));
             }
             else
             {

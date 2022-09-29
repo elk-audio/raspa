@@ -48,20 +48,24 @@ namespace driver_conf {
 /**
  * required driver versions
  */
-constexpr int REQUIRED_MAJ_VER = 0;
-constexpr int REQUIRED_MIN_VER = 3;
+constexpr int REQUIRED_MAJ_VER = 1;
+constexpr int REQUIRED_MIN_VER = 0;
 
 /**
  * device paths
  */
 #ifdef RASPA_WITH_EVL
-constexpr char DEVICE_NAME[] = "/dev/audio_rtdm";
+constexpr char DEVICE_NAME[] = "/dev/audio_evl";
 #else
 constexpr char DEVICE_NAME[] = "/dev/rtdm/audio_rtdm";
 #endif
 
 // Driver parameter definitions
+#ifdef RASPA_WITH_EVL
+constexpr char PARAM_ROOT_PATH[] = "/sys/class/audio_evl/";
+#else
 constexpr char PARAM_ROOT_PATH[] = "/sys/class/audio_rtdm/";
+#endif
 constexpr size_t PARAM_VAL_STR_LEN = 25;
 
 constexpr char SAMPLE_RATE_PARAM[] = "audio_sampling_rate";
@@ -70,8 +74,8 @@ constexpr char NUM_OUTPUT_CHANS_PARAM[] = "audio_output_channels";
 constexpr char CODEC_FORMAT_PARAM[] = "audio_format";
 constexpr char BUFFER_SIZE_PARAM[] = "audio_buffer_size";
 constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
-constexpr char MAJ_VER_PARAM[] = "audio_rtdm_ver_maj";
-constexpr char MIN_VER_PARAM[] = "audio_rtdm_ver_min";
+constexpr char MAJ_VER_PARAM[] = "audio_ver_maj";
+constexpr char MIN_VER_PARAM[] = "audio_ver_min";
 
 /**
  * @brief Enumeration to denote various codec sample formats

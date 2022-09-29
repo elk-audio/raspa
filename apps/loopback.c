@@ -31,8 +31,15 @@
 #define DEFAULT_NUM_FRAMES 64
 
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int num_samples = 0;
 static int stop_flag = 0;
+static int num_input_chans = 0;
+static int num_output_chans = 0;
+static enum
+{
+    NORMAL_MODE = 0,
+    STEREO_MIX_MODE,
+    NUM_MODE,
+} mode = NORMAL_MODE;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
@@ -49,31 +56,71 @@ void print_usage(char *argv[])
     printf("    -b <buffer size> : Specify the audio buffer size. \n"
            "                              Default is %d. Ideally should be a \n"
            "                              power of 2\n", DEFAULT_NUM_FRAMES);
+    printf("    -m <mode>        : Specify the loopback mode: \n"
+           "                              0 - Normal 1:1 loopback (Default).\n"
+           "                              1 - Stereo mix loopback\n");
     printf("    - stop the program with SIGINT\n\n");
 }
 
-void process(float* input, float* output, __attribute__((unused)) void* data)
+void normal_process(float* input, float* output, __attribute__((unused)) void* data)
 {
-    int i;
-    for (i = 0; i < num_samples; i++)
+    int frame;
+    int channel_idx;
+    int num_channels;
+
+    if (num_input_chans < num_output_chans)
     {
-        *output++ = *input++;
+        num_channels = num_input_chans;
+    }
+    else
+    {
+        num_channels = num_output_chans;
+    }
+
+    for (frame = 0; frame < num_frames; frame++)
+    {
+        for (channel_idx = 0; channel_idx < num_channels; channel_idx++)
+        {
+            output[frame + channel_idx*num_frames] = input[frame + channel_idx*num_frames];
+        }
     }
 }
 
+void stereo_mix_process(float* input, float* output, __attribute__((unused)) void* data)
+{
+    int frame;
+    int stereo_idx;
+
+    // NOTE: this loop assumes both num_input_chans and num_output_chans to be multiple of 2
+    for (frame = 0; frame < num_frames; frame++)
+    {
+        float l = 0;
+        float r = 0;
+
+        // Treat input channels as stereo pairs and sum all stereo channels together
+        for (stereo_idx = 0; stereo_idx < num_input_chans/2; stereo_idx++)
+        {
+            l += input[frame + (2*stereo_idx + 0)*num_frames];
+            r += input[frame + (2*stereo_idx + 1)*num_frames];
+        }
+
+        // Treat output channels as stereo pairs and assign them the sum of stereo inputs
+        for (stereo_idx = 0; stereo_idx < num_output_chans/2; stereo_idx++)
+        {
+            output[frame + (2*stereo_idx + 0)*num_frames] = l;
+            output[frame + (2*stereo_idx + 1)*num_frames] = r;
+        }
+    }
+}
 
 int main(int argc, char *argv[])
 {
     int res = 0;
     int option = 0;
-    if (argc < 2)
-    {
-        printf("\nRunning default buffer size of %d\n", DEFAULT_NUM_FRAMES);
-        printf("For help use %s [-h]\n", argv[0]);
-    }
+    RaspaProcessCallback raspa_callback = NULL;
 
     // Argument parsing
-    while ((option = getopt(argc, argv,"hb:")) != -1)
+    while ((option = getopt(argc, argv,"hb:m:")) != -1)
     {
         switch (option)
         {
@@ -86,12 +133,33 @@ int main(int argc, char *argv[])
             num_frames = atoi(optarg);
             break;
 
+        case 'm' :
+            mode = atoi(optarg);
+            break;
+
         default:
             print_usage(argv);
             exit(-1);
             break;
         }
     }
+
+    // Mode check and callback selection
+    switch (mode)
+    {
+        case NORMAL_MODE:
+            raspa_callback = normal_process;
+            break;
+        case STEREO_MIX_MODE:
+            raspa_callback = stereo_mix_process;
+            break;
+        default:
+            printf("Unsupported mode %d\n", mode);
+            exit(-1);
+            break;
+    }
+
+    printf("\nRunning with mode %d and with a buffer size of %d.\n", mode, num_frames);
 
     res = raspa_init();
     if (res < 0)
@@ -102,21 +170,40 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, sigint_handler);
 
-    res = raspa_open(num_frames, &process, 0, 0);
+    res = raspa_open(num_frames, raspa_callback, 0, 0);
     if (res < 0)
     {
         fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));
         exit(res);
     }
 
-    // Calculate total num samples
-    if(raspa_get_num_input_channels() > raspa_get_num_output_channels())
+    num_input_chans = raspa_get_num_input_channels();
+    num_output_chans = raspa_get_num_output_channels();
+
+    // Sanity check for the number of channels got by raspa
+    switch (mode)
     {
-        num_samples = num_frames * raspa_get_num_input_channels();
-    }
-    else
-    {
-        num_samples = num_frames * raspa_get_num_output_channels();
+    case NORMAL_MODE:
+        if (num_input_chans != num_output_chans)
+        {
+            printf("Warning: since the number of input "
+                    "and output channels is different "
+                    "then not all the channels will be used.\n");
+        }
+        break;
+
+    case STEREO_MIX_MODE:
+        if ((num_input_chans % 2) || (num_output_chans % 2))
+        {
+            printf("Error: stereo mix mode requires an even number "
+                   "of inputs and output channels.\n");
+            raspa_close();
+            exit(-1);
+        }
+        break;
+
+    default:
+        break;
     }
 
     printf("Loopback audio process started.\n");

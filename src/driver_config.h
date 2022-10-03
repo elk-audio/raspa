@@ -29,6 +29,8 @@
 #include <string>
 #include <utility>
 
+#define RASPA_PROCESSING_TASK_PRIO 90
+
 #define RASPA_IOC_MAGIC 'r'
 
 #define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
@@ -40,8 +42,9 @@
 #define RASPA_GPIO_SET_DIR_OUT	_IOW(RASPA_IOC_MAGIC, 8, RtGpio)
 #define RASPA_GPIO_SET_VAL		_IOW(RASPA_IOC_MAGIC, 9, RtGpio)
 #define RASPA_GPIO_RELEASE		_IOW(RASPA_IOC_MAGIC, 10, RtGpio)
+#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct driver_conf::ChannelInfo)
+#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct driver_conf::ChannelInfo)
 
-#define RASPA_PROCESSING_TASK_PRIO 90
 
 namespace driver_conf {
 
@@ -51,7 +54,7 @@ namespace driver_conf {
  * params
  */
 constexpr int REQUIRED_MAJ_VER = 0;
-constexpr int REQUIRED_MIN_VER = 4;
+constexpr int REQUIRED_MIN_VER = 5;
 
 /**
  * device paths
@@ -65,7 +68,6 @@ constexpr size_t PARAM_VAL_STR_LEN = 25;
 constexpr char SAMPLE_RATE_PARAM[] = "audio_sampling_rate";
 constexpr char NUM_INPUT_CHANS_PARAM[] = "audio_input_channels";
 constexpr char NUM_OUTPUT_CHANS_PARAM[] = "audio_output_channels";
-constexpr char CODEC_FORMAT_PARAM[] = "audio_format";
 constexpr char BUFFER_SIZE_PARAM[] = "audio_buffer_size";
 constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
 constexpr char MAJ_VER_PARAM[] = "audio_rtdm_ver_maj";
@@ -77,12 +79,14 @@ constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
  */
 enum class CodecFormat : int
 {
+    NONE = 0,
     INT24_LJ = 1,  // 24 bit samples left justified. Format : 0xXXXXXX00
     INT24_I2S,     // 24 bit samples I2S format (first bit is 0). Format:
                    // 0xXXXXXX00
     INT24_RJ,      // 24 bit samples right justified. Format : 0x00XXXXXX
     INT24_32RJ,    // 24 bit samples converted into 32 bit samples
     INT32,         // 32 bit samples
+    BINARY,         // No op to be done on samples
     NUM_CODEC_FORMATS
 };
 
@@ -110,12 +114,26 @@ enum class PlatformType : int
  *                              ASYNC platforms have invalid firmware version.
  *        INVALID_BUFFER_SIZE: denotes that the driver does not support the
  *                             configured buffer size
+ *        INVALID_CONFIG_FILE: denotes that one or more config files passed to
+ *                             the driver is invalid and the driver.
  */
 enum class ErrorCode : int
 {
     DEVICE_INACTIVE = 140,
     INVALID_FIRMWARE_VER,
-    INVALID_BUFFER_SIZE
+    INVALID_BUFFER_SIZE,
+    INVALID_CONFIG_FILE
+};
+
+/**
+ * @brief Struct that represents info about a channel. This info is acquired
+ *        from the driver when IOCTLs RASPA_GET_INPUT_CHAN_INFO and
+ *        RASPA_GET_OUTPUT_CHAN_INFO is called
+ */
+struct ChannelInfo {
+	uint32_t start_offset_in_words; // represents where in the hw buffer this chan starts
+	uint32_t stride_in_words;   // spacing in words between samples of this channel
+	uint32_t sample_format; // one of CodecFormat
 };
 
 /**
@@ -198,16 +216,6 @@ int get_num_output_chan()
 }
 
 /**
- * @brief Get info about the codec format from the driver
- *
- * @return int The codec format i.e one of CodecFormat
- */
-int get_codec_format()
-{
-    return read_driver_param(CODEC_FORMAT_PARAM);
-}
-
-/**
  * @brief Get info about the platform type from the driver.
  *
  * @return int one of PlatformType
@@ -235,6 +243,24 @@ int get_buffer_size()
 int get_usb_audio_type()
 {
     return read_driver_param(USB_AUDIO_TYPE_PARAM);
+}
+
+/**
+ * @brief Check if codec format given by driver is correct
+ *
+ * @param codec_format the codec format in int as given by driver
+ * @return std::pair<bool, CodecFormat> true and CodecFormat if codec_format is valid
+ *                                      false and CodecFormat::NONE if invalid
+ */
+std::pair<bool, CodecFormat> check_codec_format(int codec_format)
+{
+    if (codec_format <= static_cast<int>(CodecFormat::NONE) ||
+        codec_format >= static_cast<int>(CodecFormat::NUM_CODEC_FORMATS))
+    {
+        return {false, CodecFormat::NONE};
+    }
+
+    return {true, static_cast<CodecFormat>(codec_format)};
 }
 
 /**

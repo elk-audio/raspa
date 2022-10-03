@@ -72,6 +72,7 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
     X(209, RASPA_EGPIO_UNSUPPORTED, "Raspa: Unsupported gpio requested ")\
     X(210, RASPA_EPARAM_USB_AUDIO_TYPE, "Raspa: Unable to read usb audio type param from driver ")\
     X(211, RASPA_EUSBAUDIO_TYPE, "Raspa: Unsupported usb audio type ")\
+    X(212, RASPA_EDEVICE_INVALID_CONFIG_FILE, "Raspa: Driver cannot find one or more conf files. See dmesg.")\
 
 /**
  * @brief Macro to define the error codes as enums

@@ -1142,6 +1142,9 @@ protected:
         if (_platform_type == driver_conf::PlatformType::SYNC)
         {
             _deinit_delay_error_filter();
+        }
+        if (_platform_type != driver_conf::PlatformType::NATIVE)
+        {
             _deinit_gpio_com();
         }
 

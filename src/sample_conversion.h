@@ -198,8 +198,8 @@ public:
             {
                 auto sample = _codec_format_to_int32(src[hw_chan_index]);
                 dst[_sw_chan_start_index + n] = _int32_to_float32n(sample);
-                hw_chan_index += chan_stride;
             }
+            hw_chan_index += chan_stride;
         }
     }
 

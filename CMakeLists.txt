@@ -92,7 +92,7 @@ install(TARGETS raspa
 #############################################
 #  Subdirectory projects                    #
 #############################################
-add_subdirectory(audio_control_protocol)
+add_subdirectory(audio-control-protocol)
 add_subdirectory(third-party/fifo)
 
 if (${RASPA_WITH_APPS})

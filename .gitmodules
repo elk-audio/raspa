@@ -3,4 +3,4 @@
 	url = https://github.com/google/googletest.git
 [submodule "audio_control_protocol"]
 	path = audio_control_protocol
-	url = git@bitbucket.org:mindswteam/audio_control_protocol.git
+	url = ../audio-control-protocol.git

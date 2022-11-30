@@ -8,8 +8,9 @@ project(raspalib)
 # These can be overriden by ccmake, commandline args or using
 # set(BUILD_OPTION <new value> CACHE <type> "") in an including project
 
-option(RASPA_WITH_APPS "Build included applications" OFF)
-option(RASPA_WITH_TESTS "Build and run unit tests" ON)
+option(RASPA_WITH_APPS "Build included applications" ON)
+option(RASPA_WITH_TESTS "Build and run unit tests" OFF)
+option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" ON)
 
 #######################
 #  Cross compilation  #
@@ -65,7 +66,13 @@ set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)
 set(RASPALIB_SOURCE_FILES "${RASPALIB_COMPILATION_UNITS}" "${RASPALIB_EXTRA_CLION_SOURCES}")
 
 add_library(raspa STATIC ${RASPALIB_SOURCE_FILES})
-add_xenomai_to_target(raspa)
+
+if (${RASPA_WITH_EVL})
+    target_compile_definitions(raspa PUBLIC -DRASPA_WITH_EVL)
+    target_link_libraries(raspa PRIVATE evl)
+else()
+    add_xenomai_to_target(raspa)
+endif()
 
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)

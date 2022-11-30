@@ -10,3 +10,4 @@ add_executable(test_tone ${TEST_TONE_SOURCE_FILES})
 
 target_link_libraries(loopback PRIVATE raspa)
 target_link_libraries(test_tone PRIVATE raspa)
+

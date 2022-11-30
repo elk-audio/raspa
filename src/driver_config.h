@@ -33,7 +33,7 @@
 
 #define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT          _IO(RASPA_IOC_MAGIC, 1)
+#define RASPA_IRQ_WAIT          _IOR(RASPA_IOC_MAGIC, 1, int)
 #define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
 #define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
 #define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)
@@ -53,16 +53,24 @@ namespace driver_conf {
  * and minor versions dictate the support for the various IOCTLS and sysfs
  * params
  */
-constexpr int REQUIRED_MAJ_VER = 0;
-constexpr int REQUIRED_MIN_VER = 5;
+constexpr int REQUIRED_MAJ_VER = 1;
+constexpr int REQUIRED_MIN_VER = 0;
 
 /**
  * device paths
  */
+#ifdef RASPA_WITH_EVL
+constexpr char DEVICE_NAME[] = "/dev/audio_evl";
+#else
 constexpr char DEVICE_NAME[] = "/dev/rtdm/audio_rtdm";
+#endif
 
 // Driver parameter definitions
+#ifdef RASPA_WITH_EVL
+constexpr char PARAM_ROOT_PATH[] = "/sys/class/audio_evl/";
+#else
 constexpr char PARAM_ROOT_PATH[] = "/sys/class/audio_rtdm/";
+#endif
 constexpr size_t PARAM_VAL_STR_LEN = 25;
 
 constexpr char SAMPLE_RATE_PARAM[] = "audio_sampling_rate";
@@ -70,8 +78,8 @@ constexpr char NUM_INPUT_CHANS_PARAM[] = "audio_input_channels";
 constexpr char NUM_OUTPUT_CHANS_PARAM[] = "audio_output_channels";
 constexpr char BUFFER_SIZE_PARAM[] = "audio_buffer_size";
 constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
-constexpr char MAJ_VER_PARAM[] = "audio_rtdm_ver_maj";
-constexpr char MIN_VER_PARAM[] = "audio_rtdm_ver_min";
+constexpr char MAJ_VER_PARAM[] = "audio_ver_maj";
+constexpr char MIN_VER_PARAM[] = "audio_ver_min";
 constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
 
 /**

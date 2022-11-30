@@ -39,7 +39,7 @@ int raspa_open(int buffer_size,
                void* user_data,
                unsigned int debug_flags)
 {
-    return raspa_pimpl.open(buffer_size,
+    return raspa_pimpl.open_device(buffer_size,
                             process_callback,
                             user_data,
                             debug_flags);
@@ -82,7 +82,7 @@ RaspaMicroSec raspa_get_output_latency()
 
 int raspa_close()
 {
-    return raspa_pimpl.close();
+    return raspa_pimpl.close_device();
 }
 
 uint32_t raspa_get_gate_values()

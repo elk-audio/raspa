@@ -29,7 +29,7 @@
 
 #include "raspa/raspa.h"
 
-#define DEFAULT_NUM_FRAMES 64
+#define DEFAULT_NUM_FRAMES 32
 
 static int num_frames = DEFAULT_NUM_FRAMES;
 static int num_output_chans = 0;

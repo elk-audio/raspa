@@ -34,6 +34,11 @@ int raspa_init()
     return raspa_pimpl.init();
 }
 
+void raspa_set_cpu_affinity(int affinity)
+{
+    raspa_pimpl.set_cpu_affinity(affinity);
+}
+
 int raspa_open(int buffer_size,
                RaspaProcessCallback process_callback,
                void* user_data,

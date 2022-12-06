@@ -130,6 +130,9 @@ constexpr char XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE[] = "--cpu-affinity=0,1,2,3";
 // Default usb audio type is none
 constexpr driver_conf::UsbAudioType DEFAULT_USB_AUDIO_TYPE = driver_conf::UsbAudioType::NONE;
 
+// Default cpu affinity
+constexpr int DEFAULT_CPU_AFFINITY = 0;
+
 /**
  * @brief Entry point for the real time thread
  * @param data Contains pointer to an instance of RaspaPimpl
@@ -167,6 +170,7 @@ public:
             _interrupts_counter(0),
             _stop_request_flag(false),
             _break_on_mode_sw(false),
+            _cpu_affinity(DEFAULT_CPU_AFFINITY),
             _sample_rate(0.0),
             _num_input_chans(0),
             _num_output_chans(0),
@@ -247,6 +251,11 @@ public:
         _kernel_buffer_mem_size = NUM_PAGES_KERNEL_MEM * getpagesize();
 
         return RASPA_SUCCESS;
+    }
+
+    void set_cpu_affinity(int affinity)
+    {
+        _cpu_affinity = affinity;
     }
 
     int open_device(int buffer_size,
@@ -365,11 +374,11 @@ public:
         // Force affinity on first thread
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
-        CPU_SET(0, &cpuset);
+        CPU_SET(_cpu_affinity, &cpuset);
         auto res = pthread_attr_setaffinity_np(&task_attributes,
                                                sizeof(cpu_set_t),
                                                &cpuset);
-        if (res < 0)
+        if (res != 0)
         {
             _cleanup();
             _raspa_error_code.set_error_val(RASPA_ETASK_AFFINITY, res);
@@ -381,7 +390,7 @@ public:
                                       &task_attributes,
                                       &raspa_pimpl_task_entry,
                                       this));
-        if (res < 0)
+        if (res != 0)
         {
             _cleanup();
             _raspa_error_code.set_error_val(RASPA_ETASK_CREATE, res);
@@ -1574,6 +1583,9 @@ protected:
 
     // flag to break on mode switch occurrence
     bool _break_on_mode_sw;
+
+    // configuration data
+    int _cpu_affinity;
 
     // audio buffer parameters
     float _sample_rate;

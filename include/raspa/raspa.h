@@ -28,8 +28,8 @@ extern "C" {
 
 // defines the api version
 #define RASPA_VERSION_MAJ 0
-#define RASPA_VERSION_MIN 1
-#define RASPA_VERSION_REV 7
+#define RASPA_VERSION_MIN 2
+#define RASPA_VERSION_REV 0
 
 /**
  * @brief Convert error codes to human readable strings.
@@ -60,6 +60,14 @@ typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
  * @return 0 in case of success, linux error code otherwise
  */
 int raspa_init();
+
+/**
+ * @brief Set RASPA RT thread CPU affinity. This function must be called before calling raspa_open().
+ *        Default affinity is 0.
+ *
+ * @param affinity CPU affinity of the RASPA RT thread
+ */
+void raspa_set_cpu_affinity(int affinity);
 
 /**
  * @brief Open device and check configuration with driver & audio controller

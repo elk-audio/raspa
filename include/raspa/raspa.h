@@ -31,6 +31,9 @@ extern "C" {
 #define RASPA_VERSION_MIN 2
 #define RASPA_VERSION_REV 0
 
+// default log file path
+#define RASPA_DEFAULT_RUN_LOG_FILE     "/tmp/raspa.log"
+
 /**
  * @brief Convert error codes to human readable strings.
  *
@@ -42,6 +45,11 @@ const char* raspa_get_error_msg(int code);
  * @brief Debug flag, signal debugger if a modeswith is detected.
  */
 #define RASPA_DEBUG_SIGNAL_ON_MODE_SW   (1<<0)
+
+/**
+ * @brief Debug flag, enable logging of the run period data to file
+ */
+#define RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE  (1<<1)
 
 typedef int64_t RaspaMicroSec;
 
@@ -60,6 +68,16 @@ typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
  * @return 0 in case of success, linux error code otherwise
  */
 int raspa_init();
+
+/**
+ * @brief Set the run log file path. Path will be used by the open function to create
+ *        a new run log file if logging is enabled with RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE
+ *        debug flag.
+ *        Default path is set by RASPA_DEFAULT_RUN_LOG_FILE.
+ *
+ * @param path Path of the logging file
+ */
+void raspa_set_run_log_file(const char *path);
 
 /**
  * @brief Set RASPA RT thread CPU affinity. This function must be called before calling raspa_open().

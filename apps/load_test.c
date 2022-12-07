@@ -47,6 +47,7 @@ static int stop_flag = 0;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
 static int num_frames = DEFAULT_NUM_FRAMES;
+static int log_file_enabled = 0;
 static int input_channel = DEFAULT_INPUT_CHANNEL;
 static int output_channel = DEFAULT_OUTPUT_CHANNEL;
 static int num_biquad = DEFAULT_BIQUAD_NUM;
@@ -121,6 +122,7 @@ void print_usage(char *argv[])
            "                            Default is %d. Ideally should be a\n"
            "                            power of 2.\n",
                                         DEFAULT_NUM_FRAMES);
+    printf("    -l                    : Enable logging to %s\n", RASPA_DEFAULT_RUN_LOG_FILE);
     printf("    -i <input_channel>    : Specify the input channel index.\n"
            "                            0 is the 1st channel.\n"
            "                            Default is %d.\n",
@@ -307,7 +309,7 @@ int main(int argc, char *argv[])
     d_mem.biquad = NULL;
     d_mem.delay  = NULL;
 
-    while ((option = getopt(argc, argv,"hc:b:i:o:f:d:s:x:")) != -1)
+    while ((option = getopt(argc, argv,"hc:b:li:o:f:d:s:x:")) != -1)
     {
         switch (option)
         {
@@ -322,6 +324,10 @@ int main(int argc, char *argv[])
 
         case 'b' :
             num_frames = atoi(optarg);
+            break;
+
+        case 'l' :
+            log_file_enabled = 1;
             break;
 
         case 'i' :
@@ -373,7 +379,7 @@ int main(int argc, char *argv[])
         raspa_set_cpu_affinity(cpu);
     }
 
-    res = raspa_open(num_frames, process, 0, 0);
+    res = raspa_open(num_frames, process, 0, log_file_enabled ? RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE : 0);
     if (res < 0)
     {
         fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));

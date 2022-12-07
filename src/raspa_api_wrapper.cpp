@@ -34,6 +34,11 @@ int raspa_init()
     return raspa_pimpl.init();
 }
 
+void raspa_set_run_log_file(const char *path)
+{
+    raspa_pimpl.set_run_log_file(path);
+}
+
 void raspa_set_cpu_affinity(int affinity)
 {
     raspa_pimpl.set_cpu_affinity(affinity);

@@ -52,6 +52,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <algorithm>
@@ -66,6 +67,7 @@
 #include "raspa_gpio_com.h"
 #include "sample_conversion.h"
 #include "raspa_alsa_usb.h"
+#include "raspa_run_logger.h"
 
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
@@ -170,6 +172,8 @@ public:
             _interrupts_counter(0),
             _stop_request_flag(false),
             _break_on_mode_sw(false),
+            _run_logger_enable(false),
+            _run_logger_file_name(RASPA_DEFAULT_RUN_LOG_FILE),
             _cpu_affinity(DEFAULT_CPU_AFFINITY),
             _sample_rate(0.0),
             _num_input_chans(0),
@@ -253,6 +257,11 @@ public:
         return RASPA_SUCCESS;
     }
 
+    void set_run_log_file(const char *path)
+    {
+        _run_logger_file_name = path;
+    }
+
     void set_cpu_affinity(int affinity)
     {
         _cpu_affinity = affinity;
@@ -293,9 +302,14 @@ public:
             return res;
         }
 
-        if (debug_flags == 1 && RASPA_DEBUG_SIGNAL_ON_MODE_SW == 1)
+        if (debug_flags & RASPA_DEBUG_SIGNAL_ON_MODE_SW)
         {
             _break_on_mode_sw = true;
+        }
+
+        if (debug_flags & RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE)
+        {
+            _run_logger_enable = true;
         }
 
         res = _open_device();
@@ -348,6 +362,15 @@ public:
             if (res)
             {
                 return -RASPA_EALSA_INIT_FAILED;
+            }
+        }
+
+        if (_run_logger_enable)
+        {
+            auto res = _run_logger.start(_run_logger_file_name);
+            if (res != RASPA_SUCCESS)
+            {
+                return res;
             }
         }
 
@@ -1183,6 +1206,11 @@ protected:
             _deinit_gpio_com();
         }
 
+        if (_run_logger_enable)
+        {
+            _run_logger.terminate();
+        }
+
         return res;
     }
 
@@ -1263,6 +1291,13 @@ protected:
      */
     void _perform_user_callback(int32_t* input_samples, int32_t* output_samples)
     {
+        RaspaMicroSec t_start = 0;  // suppress compiler warnings
+
+        if (_run_logger_enable)
+        {
+             t_start = get_time();
+        }
+
         if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
             int32_t* usb_in;
@@ -1307,6 +1342,11 @@ protected:
 
             _alsa_usb->put_usb_output_samples(usb_out);
             _alsa_usb->increment_buf_indices();
+        }
+
+        if (_run_logger_enable)
+        {
+            _run_logger.put(t_start, get_time());
         }
     }
 
@@ -1584,6 +1624,12 @@ protected:
     // flag to break on mode switch occurrence
     bool _break_on_mode_sw;
 
+    // flag to enable logging of run data to file
+    bool _run_logger_enable;
+
+    // configuration data
+    std::string _run_logger_file_name;
+
     // configuration data
     int _cpu_affinity;
 
@@ -1630,6 +1676,9 @@ protected:
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;
+
+    // run logger instance
+    RaspaRunLogger _run_logger;
 };
 
 static void* raspa_pimpl_task_entry(void* data)

@@ -12,9 +12,10 @@ def text(field: bytes) -> str:
 
 parser = argparse.ArgumentParser(description='Get some statistics from the Raspa run data binary file')
 parser.add_argument('filename', help='File with raspa run data')
-parser.add_argument('--plot', help='Plot histogram', action='store_true')
-parser.add_argument('--label', help='Plot name')
 parser.add_argument('--csv', help='Export CSV data')
+parser.add_argument('--label', help='Plot label')
+parser.add_argument('--pdf', help='Export plot to PDF')
+parser.add_argument('--plot', help='Plot histogram to screen', action='store_true')
 
 args = parser.parse_args()
 
@@ -53,7 +54,7 @@ if args.csv:
         for item in data_csv:
             writer.writerow(item)
 
-if args.plot:
+if args.pdf or args.plot:
     import matplotlib.pyplot as plt
 
     plt.hist(duration, 10, log=True, alpha=0.75)
@@ -63,4 +64,9 @@ if args.plot:
     plt.xlabel('Processing time' + comments)
     plt.ylabel('Number of occurences')
     plt.grid(True)
-    plt.show()
+
+    if args.pdf:
+        plt.savefig(args.pdf)
+
+    if args.plot:
+        plt.show()

@@ -31,16 +31,19 @@
 #include "raspa/raspa.h"
 
 // default parameter values
-#define DEFAULT_CPU             -1
-#define DEFAULT_NUM_FRAMES      32
-#define DEFAULT_INPUT_CHANNEL   0
-#define DEFAULT_OUTPUT_CHANNEL  0
-#define DEFAULT_BIQUAD_NUM      128
-#define DEFAULT_DELAY_LINE_NUM  128
-#define DEFAULT_DELAY_LINE_STEP (32768 / 4)
-#define DEFAULT_DELAY_LINE_LEN  (256 * 1024)
+#define DEFAULT_CPU                     -1
+#define DEFAULT_NUM_FRAMES              32
+#define DEFAULT_INPUT_CHANNEL           0
+#define DEFAULT_OUTPUT_CHANNEL          0
+#define DEFAULT_BIQUAD_NUM              128
+#define DEFAULT_DELAY_LINE_NUM          128
+#define DEFAULT_DELAY_LINE_LEN          (256 * 1024)
+#define DEFAULT_DELAY_LINE_STEP         (32768 / 4)
+#define DEFAULT_DELAY_LINE_TAPS         1
+#define DEFAULT_DELAY_LINE_TAP_DELAY    8
 
-#define MEM_ALLOC_ALIGN         (1 * 1024 * 1024)
+#define MAX_DELAY_LINE_TAPS             64
+#define MEM_ALLOC_ALIGN                 (1 * 1024 * 1024)
 
 static int cpu = DEFAULT_CPU;
 static int stop_flag = 0;
@@ -54,6 +57,8 @@ static int num_biquad = DEFAULT_BIQUAD_NUM;
 static int num_delay = DEFAULT_DELAY_LINE_NUM;
 static int delay_line_len = DEFAULT_DELAY_LINE_LEN;
 static int delay_line_step = DEFAULT_DELAY_LINE_STEP;
+static int num_taps = DEFAULT_DELAY_LINE_TAPS;
+static int tap_delay = DEFAULT_DELAY_LINE_TAP_DELAY;
 
 struct biquad_k
 {
@@ -76,8 +81,8 @@ struct delay_k
 struct delay_d
 {
     float *mem;
-    size_t r_pos;
     size_t w_pos;
+    size_t r_pos[MAX_DELAY_LINE_TAPS];
 };
 
 static struct
@@ -144,6 +149,13 @@ void print_usage(char *argv[])
            "                            consecutive delay lines. First delay line\n"
            "                            has a delay of 0 samples. Default is %d.\n",
                                         DEFAULT_DELAY_LINE_STEP);
+    printf("    -t <num_taps>         : Specify the number of delay line taps.\n"
+           "                            Default is %d.\n"
+           "                            Maximum is %d.\n",
+                                        DEFAULT_DELAY_LINE_TAPS, MAX_DELAY_LINE_TAPS);
+    printf("    -y <tap_delay>        : Specify the delay between consecutive taps.\n"
+           "                            Default is %d.\n",
+                                        DEFAULT_DELAY_LINE_TAP_DELAY);
     printf("    - stop the program with SIGINT\n\n");
 }
 
@@ -158,7 +170,16 @@ void *alloc_mem(size_t num, size_t item_size)
     }
     if (ptr != NULL)
     {
-        memset(ptr, 0, num * item_size);
+        res = mlock(ptr, num * item_size);
+        if (res != 0)
+        {
+            free(ptr);
+            ptr = NULL;
+        }
+        else
+        {
+            memset(ptr, 0, num * item_size);
+        }
     }
     return ptr;
 }
@@ -235,9 +256,17 @@ void delay_init(void)
 
         for (int i = 0; i < num_delay; i++)
         {
-            k_mem.delay[i].gain = 0.5f / num_delay;
-
-            d_mem.delay[i].w_pos = (i * delay_line_step) % delay_line_len;
+            k_mem.delay[i].gain = 0.5f / num_delay / num_taps;
+            d_mem.delay[i].w_pos = 0;
+            for (int tap = 0; tap < num_taps; tap++)
+            {
+                int r_pos = -(i * delay_line_step + tap * tap_delay);
+                while (r_pos < 0)
+                {
+                    r_pos += delay_line_len;
+                }
+                d_mem.delay[i].r_pos[tap] = r_pos;
+            }
             d_mem.delay[i].mem = alloc_mem(delay_line_len, sizeof(float));
             check_alloc(d_mem.delay[i].mem);
         }
@@ -287,14 +316,17 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
         {
             x = selected_input[i] * k->gain; // input scaling
 
-            d->mem[d->w_pos++] = x; // delay line write
-            y = d->mem[d->r_pos++]; // delay line read
-
-            // index modulo
+            // delay line write and write index update
+            d->mem[d->w_pos++] = x;
             d->w_pos %= delay_line_len;
-            d->r_pos %= delay_line_len;
 
-            selected_output[i] += y; // accumulate on output
+            // delay line read (taps done inside this loop to stress more the cache!)
+            for (int tap = 0; tap < num_taps; tap++)
+            {
+                y = d->mem[d->r_pos[tap]++];        // delay line read
+                d->r_pos[tap] %= delay_line_len;    // tap read index update
+                selected_output[i] += y;            // accumulate on output
+            }
         }
     }
 }
@@ -309,7 +341,7 @@ int main(int argc, char *argv[])
     d_mem.biquad = NULL;
     d_mem.delay  = NULL;
 
-    while ((option = getopt(argc, argv,"hc:b:li:o:f:d:s:x:")) != -1)
+    while ((option = getopt(argc, argv,"hc:b:li:o:f:d:s:x:t:y:")) != -1)
     {
         switch (option)
         {
@@ -352,6 +384,19 @@ int main(int argc, char *argv[])
 
         case 'x' :
             delay_line_step = atoi(optarg);
+            break;
+
+        case 't' :
+            num_taps = atoi(optarg);
+            if (num_taps > MAX_DELAY_LINE_TAPS)
+            {
+                printf("number of taps greater than %d!\n", MAX_DELAY_LINE_TAPS);
+                exit(-1);
+            }
+            break;
+
+        case 'y' :
+            tap_delay = atoi(optarg);
             break;
 
         default:

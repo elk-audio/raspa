@@ -2,42 +2,14 @@
 
 set -u
 
-RUN_DURATION=600	# 10 mins
+RUN_DURATION_NORMAL=600	# 10 mins run duration for each test
+RUN_DURATION_QUICK=30	# 30 seconds run duration for each test
+
 NEED_ISOLCPUS="1-3"
 
 PARSE_ONLY=false
-
-RUN_STRESS_NG="stress-ng --memthrash 1"
-SLEEP="sleep $RUN_DURATION"
-CLEAN_RASPA_LOG="rm /tmp/raspa.log"
-KILL_LOAD_TEST="while pgrep -x load_test; do killall -s SIGINT load_test; sleep 1; done"
-KILL_STRESS_NG="while pgrep -x stress-ng; do killall -s SIGKILL stress-ng; sleep 1; done"
-INITIAL_CLEANUP="$KILL_STRESS_NG; $KILL_LOAD_TEST; sleep 1; $CLEAN_RASPA_LOG"
-
-# Array containing the test commands
-# TEST_NAME array should be updated accordingly
-TEST_COMMANDS=(
-"$INITIAL_CLEANUP; load_test -c3 -l -f256 -d0 & $SLEEP; $KILL_LOAD_TEST"							# cpu intensive test
-"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d256 -s262144 -x8 & $SLEEP; $KILL_LOAD_TEST"						# memory intensive test, L1 misses
-"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d256 -s1048576 -x8192 & $SLEEP; $KILL_LOAD_TEST"					# memory intensive test, L1 thrashing
-"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d256 -s262144 -x71 & $SLEEP; $KILL_LOAD_TEST"						# memory intensive test, L1 noise
-"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f256 -d0 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"			# cpu intensive test + stress-ng
-"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d256 -s262144 -x8 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"		# memory intensive test, L1 misses + stress-ng
-"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d256 -s1048576 -x8192 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"	# memory intensive test, L1 thrashing + stress-ng
-"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d256 -s262144 -x71 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"	# memory intensive test, L1 noise + stress-ng
-)
-
-# This array contains the names for the above tests. Avoid using spaces in the test names!
-TEST_NAME=(
-"cpu"
-"mem_l1_miss"
-"mem_l1_thrashing"
-"mem_l1_noise"
-"stress-ng+cpu"
-"stress-ng+mem_l1_miss"
-"stress-ng+mem_l1_thrashing"
-"stress-ng+mem_l1_noise"
-)
+QUICK_TEST=false
+RUN_DURATION=${RUN_DURATION_NORMAL}
 
 print_help() {
 	echo "Usage: $0 [OPTION] NAME SSH-HOST"
@@ -56,6 +28,7 @@ print_help() {
 	echo "OPTIONS:"
 	echo ""
 	echo "  -h | --help        Print this help."
+	echo "  -q | --quick       Perform a quicker test."
 	echo "  -p | --parse-only  Parse log files only without running any test on the target."
 	echo "                     Raspa log files must already be inside OUTPUT-DIR."
 	echo "                     When using this option the SSH-HOST parameter could be omitted."
@@ -78,6 +51,9 @@ while [ $# -gt 0 ]; do
 			print_help
 			exit 0
 			;;
+		-q | --quick)
+			RUN_DURATION=${RUN_DURATION_QUICK}
+			;;
 		-p | --parse-only)
 			PARSE_ONLY=true
 			;;
@@ -89,9 +65,43 @@ while [ $# -gt 0 ]; do
 done
 NAME=$1
 
+RUN_STRESS_NG="stress-ng --memthrash 1"
+SLEEP="sleep $RUN_DURATION"
+CLEAN_RASPA_LOG="rm /tmp/raspa.log"
+KILL_LOAD_TEST="while pgrep -x load_test; do killall -s SIGINT load_test; sleep 1; done"
+KILL_STRESS_NG="while pgrep -x stress-ng; do killall -s SIGKILL stress-ng; sleep 1; done"
+INITIAL_CLEANUP="$KILL_STRESS_NG; $KILL_LOAD_TEST; sleep 1; $CLEAN_RASPA_LOG"
+
+# Array containing the test commands
+# TEST_NAME array should be updated accordingly
+TEST_COMMANDS=(
+"$INITIAL_CLEANUP; load_test -c3 -l -f512 -d0 & $SLEEP; $KILL_LOAD_TEST"								# cpu intensive test
+"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d32 -s262144 -x0 -t16 -y8192 & $SLEEP; $KILL_LOAD_TEST"					# memory intensive test, L1 thrashing
+"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d32 -s4194304 -x0 -t16 -y262144 & $SLEEP; $KILL_LOAD_TEST"					# memory intensive test, L2 thrashing
+"$INITIAL_CLEANUP; load_test -c3 -l -f0 -d32 -s262144 -x71 -t16 -y13 & $SLEEP; $KILL_LOAD_TEST"						# memory intensive test, sparse pattern
+"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f512 -d0 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"				# cpu intensive test + stress-ng
+"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d32 -s262144 -x0 -t16 -y8192 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"	# memory intensive test, L1 thrashing + stress-ng
+"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d32 -s4194304 -x0 -t16 -y262144 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"	# memory intensive test, L2 thrashing + stress-ng
+"$INITIAL_CLEANUP; $RUN_STRESS_NG & load_test -c3 -l -f0 -d32 -s262144 -x71 -t16 -y13 & $SLEEP; $KILL_LOAD_TEST; $KILL_STRESS_NG"	# memory intensive test, sparse pattern + stress-ng
+)
+
+# This array contains the names for the above tests. Avoid using spaces in the test names!
+TEST_NAME=(
+"cpu"
+"mem_l1_thrash"
+"mem_l2_thrash"
+"mem_sparse"
+"stress-ng+cpu"
+"stress-ng+mem_l1_thrash"
+"stress-ng+mem_l2_thrash"
+"stress-ng+mem_sparse"
+)
+
+# Create output directory
 OUTPUT_DIR=$NAME
 mkdir -p $OUTPUT_DIR
 
+# Verify target and get info
 if ! $PARSE_ONLY; then
 
 	SSH_HOST=$2
@@ -141,8 +151,19 @@ if ! $PARSE_ONLY; then
 		error
 	fi
 
+	# Save test info
+	info_file=${OUTPUT_DIR}/info.txt
+	echo "Test info" > ${info_file}
+	echo "target uname   : $(cat ${OUTPUT_DIR}/uname.txt)" >> ${info_file}
+	echo "target cmdline : $(cat ${OUTPUT_DIR}/cmdline.txt)" >> ${info_file}
+	echo "run duration   : ${RUN_DURATION}" >> ${info_file}
+
 	# Save a copy of the test script used
 	cp $0 ${OUTPUT_DIR}/
+
+	# Remove temporary files
+	rm ${OUTPUT_DIR}/uname.txt
+	rm ${OUTPUT_DIR}/cmdline.txt
 fi
 
 # Run tests on target

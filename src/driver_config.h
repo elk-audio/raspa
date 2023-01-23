@@ -28,6 +28,7 @@
 #include <cerrno>
 #include <string>
 #include <utility>
+#include "audio_control_protocol/device_control_protocol.h"
 
 #define RASPA_PROCESSING_TASK_PRIO 90
 
@@ -42,8 +43,8 @@
 #define RASPA_GPIO_SET_DIR_OUT	_IOW(RASPA_IOC_MAGIC, 8, RtGpio)
 #define RASPA_GPIO_SET_VAL		_IOW(RASPA_IOC_MAGIC, 9, RtGpio)
 #define RASPA_GPIO_RELEASE		_IOW(RASPA_IOC_MAGIC, 10, RtGpio)
-#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct driver_conf::ChannelInfo)
-#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct driver_conf::ChannelInfo)
+#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct device_ctrl::audio_channel_info_data)
+#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct device_ctrl::audio_channel_info_data)
 
 
 namespace driver_conf {
@@ -131,17 +132,6 @@ enum class ErrorCode : int
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE,
     INVALID_CONFIG_FILE
-};
-
-/**
- * @brief Struct that represents info about a channel. This info is acquired
- *        from the driver when IOCTLs RASPA_GET_INPUT_CHAN_INFO and
- *        RASPA_GET_OUTPUT_CHAN_INFO is called
- */
-struct ChannelInfo {
-	uint32_t start_offset_in_words; // represents where in the hw buffer this chan starts
-	uint32_t stride_in_words;   // spacing in words between samples of this channel
-	uint32_t sample_format; // one of CodecFormat
 };
 
 /**

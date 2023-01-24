@@ -28,7 +28,6 @@
 #include <cerrno>
 #include <string>
 #include <utility>
-#include "audio_control_protocol/device_control_protocol.h"
 
 #define RASPA_PROCESSING_TASK_PRIO 90
 
@@ -43,8 +42,8 @@
 #define RASPA_GPIO_SET_DIR_OUT	_IOW(RASPA_IOC_MAGIC, 8, RtGpio)
 #define RASPA_GPIO_SET_VAL		_IOW(RASPA_IOC_MAGIC, 9, RtGpio)
 #define RASPA_GPIO_RELEASE		_IOW(RASPA_IOC_MAGIC, 10, RtGpio)
-#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct device_ctrl::audio_channel_info_data)
-#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct device_ctrl::audio_channel_info_data)
+#define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct driver_conf::ChannelInfo)
+#define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct driver_conf::ChannelInfo)
 
 
 namespace driver_conf {
@@ -132,6 +131,21 @@ enum class ErrorCode : int
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE,
     INVALID_CONFIG_FILE
+};
+
+/**
+ * @brief Struct that represents info about a channel. This info is acquired
+ *        from the driver when IOCTLs RASPA_GET_INPUT_CHAN_INFO and
+ *        RASPA_GET_OUTPUT_CHAN_INFO is called
+ */
+struct ChannelInfo {
+    uint8_t sw_ch_id;               // The software channel ID or DEVICE_CTRL_AUDIO_CHANNEL_NOT_VALID
+    uint8_t hw_ch_id;               // The hardware channel ID or DEVICE_CTRL_AUDIO_CHANNEL_NOT_VALID
+    uint8_t direction;              // The audio channel direction as of audio_channel_direction enum
+    uint8_t sample_format;          // The sample format as of audio_sample_format enum
+    uint8_t channel_name[32];       // The channe name must be a valid null terminated string
+    uint32_t start_offset_in_words; // Audio channel data start offset in words
+    uint32_t stride_in_words;       // Audio channel data stride in words
 };
 
 /**

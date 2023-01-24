@@ -974,8 +974,8 @@ protected:
         _input_sample_converter.resize(_num_driver_input_chans);
         _output_sample_converter.resize(_num_driver_output_chans);
 
-        std::vector<struct device_ctrl::audio_channel_info_data> input_chan_info;
-        std::vector<struct device_ctrl::audio_channel_info_data> output_chan_info;
+        std::vector<struct driver_conf::ChannelInfo> input_chan_info;
+        std::vector<struct driver_conf::ChannelInfo> output_chan_info;
 
         // get input chan info
         input_chan_info.resize(_num_driver_input_chans);

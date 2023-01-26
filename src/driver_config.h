@@ -121,16 +121,19 @@ enum class PlatformType : int
  *        INVALID_FIRMWARE_VER: denotes that the microcontroller in SYNC and
  *                              ASYNC platforms have invalid firmware version.
  *        INVALID_BUFFER_SIZE: denotes that the driver does not support the
- *                             configured buffer size
+ *                             configured buffer size.
  *        INVALID_CONFIG_FILE: denotes that one or more config files passed to
  *                             the driver is invalid and the driver.
+ *        CANNOT_GET_AUDIO_CONFIGURATION : denotes that the driver was not able
+ *                             to retrieve the audio configuration.
  */
 enum class ErrorCode : int
 {
     DEVICE_INACTIVE = 140,
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE,
-    INVALID_CONFIG_FILE
+    INVALID_CONFIG_FILE,
+    CANNOT_GET_AUDIO_CONFIGURATION
 };
 
 /**

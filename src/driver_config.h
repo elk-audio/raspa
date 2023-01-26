@@ -33,15 +33,15 @@
 
 #define RASPA_IOC_MAGIC 'r'
 
-#define RASPA_IRQ_WAIT          _IOR(RASPA_IOC_MAGIC, 1, int)
-#define RASPA_PROC_START        _IO(RASPA_IOC_MAGIC, 3)
-#define RASPA_USERPROC_FINISHED _IOW(RASPA_IOC_MAGIC, 4, int)
-#define RASPA_PROC_STOP         _IO(RASPA_IOC_MAGIC, 5)
-#define RASPA_FW_TRANSFER		_IO(RASPA_IOC_MAGIC, 6)
-#define RASPA_GPIO_GET_PIN		_IOW(RASPA_IOC_MAGIC, 7, RtGpio)
-#define RASPA_GPIO_SET_DIR_OUT	_IOW(RASPA_IOC_MAGIC, 8, RtGpio)
-#define RASPA_GPIO_SET_VAL		_IOW(RASPA_IOC_MAGIC, 9, RtGpio)
-#define RASPA_GPIO_RELEASE		_IOW(RASPA_IOC_MAGIC, 10, RtGpio)
+#define RASPA_IRQ_WAIT              _IOR(RASPA_IOC_MAGIC, 1, int)
+#define RASPA_PROC_START            _IO(RASPA_IOC_MAGIC, 3)
+#define RASPA_USERPROC_FINISHED     _IOW(RASPA_IOC_MAGIC, 4, int)
+#define RASPA_PROC_STOP             _IO(RASPA_IOC_MAGIC, 5)
+#define RASPA_FW_TRANSFER           _IO(RASPA_IOC_MAGIC, 6)
+#define RASPA_GPIO_GET_PIN          _IOW(RASPA_IOC_MAGIC, 7, RtGpio)
+#define RASPA_GPIO_SET_DIR_OUT      _IOW(RASPA_IOC_MAGIC, 8, RtGpio)
+#define RASPA_GPIO_SET_VAL          _IOW(RASPA_IOC_MAGIC, 9, RtGpio)
+#define RASPA_GPIO_RELEASE          _IOW(RASPA_IOC_MAGIC, 10, RtGpio)
 #define RASPA_GET_INPUT_CHAN_INFO   _IOWR(RASPA_IOC_MAGIC, 11, struct driver_conf::ChannelInfo)
 #define RASPA_GET_OUTPUT_CHAN_INFO  _IOWR(RASPA_IOC_MAGIC, 12, struct driver_conf::ChannelInfo)
 
@@ -121,16 +121,19 @@ enum class PlatformType : int
  *        INVALID_FIRMWARE_VER: denotes that the microcontroller in SYNC and
  *                              ASYNC platforms have invalid firmware version.
  *        INVALID_BUFFER_SIZE: denotes that the driver does not support the
- *                             configured buffer size
+ *                             configured buffer size.
  *        INVALID_CONFIG_FILE: denotes that one or more config files passed to
  *                             the driver is invalid and the driver.
+ *        CANNOT_GET_AUDIO_CONFIGURATION : denotes that the driver was not able
+ *                             to retrieve the audio configuration.
  */
 enum class ErrorCode : int
 {
     DEVICE_INACTIVE = 140,
     INVALID_FIRMWARE_VER,
     INVALID_BUFFER_SIZE,
-    INVALID_CONFIG_FILE
+    INVALID_CONFIG_FILE,
+    CANNOT_GET_AUDIO_CONFIGURATION
 };
 
 /**
@@ -139,9 +142,13 @@ enum class ErrorCode : int
  *        RASPA_GET_OUTPUT_CHAN_INFO is called
  */
 struct ChannelInfo {
-	uint32_t start_offset_in_words; // represents where in the hw buffer this chan starts
-	uint32_t stride_in_words;   // spacing in words between samples of this channel
-	uint32_t sample_format; // one of CodecFormat
+    uint8_t sw_ch_id;               // The software channel ID or DEVICE_CTRL_AUDIO_CHANNEL_NOT_VALID
+    uint8_t hw_ch_id;               // The hardware channel ID or DEVICE_CTRL_AUDIO_CHANNEL_NOT_VALID
+    uint8_t direction;              // The audio channel direction as of audio_channel_direction enum
+    uint8_t sample_format;          // The sample format as of audio_sample_format enum
+    uint8_t channel_name[32];       // The channel name must be a valid null terminated string
+    uint32_t start_offset_in_words; // Audio channel data start offset in words
+    uint32_t stride_in_words;       // Audio channel data stride in words
 };
 
 /**

@@ -979,15 +979,25 @@ protected:
 
         // get input chan info
         input_chan_info.resize(_num_driver_input_chans);
-        __RASPA(ioctl(_device_handle,
-                        RASPA_GET_INPUT_CHAN_INFO,
-                        input_chan_info.data()));
+        auto res = __RASPA(ioctl(_device_handle,
+                                    RASPA_GET_INPUT_CHAN_INFO,
+                                    input_chan_info.data()));
+        if (res < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_INPUT_AUDIO_INFO, res);
+            return -RASPA_EPARAM_INPUT_AUDIO_INFO;
+        }
 
         // get output chan info
         output_chan_info.resize(_num_driver_output_chans);
-        __RASPA(ioctl(_device_handle,
-                           RASPA_GET_OUTPUT_CHAN_INFO,
-                           output_chan_info.data()));
+        res = __RASPA(ioctl(_device_handle,
+                                RASPA_GET_OUTPUT_CHAN_INFO,
+                                output_chan_info.data()));
+        if (res < 0)
+        {
+            _raspa_error_code.set_error_val(RASPA_EPARAM_OUTPUT_AUDIO_INFO, res);
+            return -RASPA_EPARAM_OUTPUT_AUDIO_INFO;
+        }
 
         int chan_id = 0;
         for (const auto& info : input_chan_info)

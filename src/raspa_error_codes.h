@@ -36,45 +36,47 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
  *        X should take 3 arguments
  */
 #define ERROR_CODES_OP(X)\
-    X(0,   RASPA_SUCCESS, "Raspa: No error. ")\
-    X(100, RASPA_EBUFFER_SIZE_MISMATCH, "Raspa: Buffer size mismatch with driver ")\
-    X(101, RASPA_EVERSION, "Raspa: Version mismatch with driver ")\
-    X(102, RASPA_ENOMEM, "Raspa: Failed to get buffers from driver ")\
-    X(103, RASPA_EUSER_BUFFERS, "Raspa: Failed to allocate user audio buffers ")\
-    X(104, RASPA_ETASK_AFFINITY, "Raspa: Failed to set affinity for RT task ")\
-    X(105, RASPA_ETASK_CREATE, "Raspa: Failed to create RT task ")\
-    X(106, RASPA_ETASK_START, "Raspa: Failed to start RT task ")\
-    X(107, RASPA_ETASK_STOP, "Raspa: Failed to stop RT task ")\
-    X(108, RASPA_ETASK_CANCEL, "Raspa: Failed to cancel RT task ")\
-    X(109, RASPA_EUNMAP, "Raspa: Failed to unmap driver buffers ")\
-    X(110, RASPA_EDEVICE_OPEN, "Raspa: Failed to open driver ")\
-    X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver ")\
-    X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format ")\
-    X(113, RASPA_EPLATFORM_TYPE, "Raspa: Unsupported platform type ")\
-    X(114, RASPA_EDEVICE_FIRMWARE, "Raspa: Incorrect firmware on external micro-controller ")\
-    X(115, RASPA_EDEVICE_INACTIVE, "Raspa: External micro-controller not responding ")\
-    X(116, RASPA_EINSOCKET_CREATION, "Raspa: Failed to create input socket for gpio data communication ")\
-    X(117, RASPA_EOUTSOCKET_CREATION, "Raspa: Failed to create output socket for gpio data communication ")\
-    X(118, RASPA_EINSOCKET_BIND, "Raspa: Failed to bind input socket to address ")\
-    X(119, RASPA_EINSOCKET_TIMEOUT, "Raspa: Failed to set input socket to address ")\
-    X(120, RASPA_EMLOCKALL, "Raspa: Failed to lock memory needed to prevent page swapping ")\
-    X(121, RASPA_EBUFFER_SIZE_INVALID, "Raspa: driver configured with invalid buffer size. ")\
-    X(122, RASPA_EBUFFER_SIZE_SC, "Raspa: sample converter does not suppot specified buffer size. ")\
-    X(200, RASPA_EPARAM, "Raspa: Unable to param from driver ")\
-    X(201, RASPA_EPARAM_SAMPLERATE, "Raspa: Unable to read sample rate param from driver ")\
-    X(202, RASPA_EPARAM_INPUTCHANS, "Raspa: Unable to read num input chans param from driver ")\
-    X(203, RASPA_EPARAM_OUTPUTCHANS, "Raspa: Unable to read num output chans param from driver ")\
-    X(204, RASPA_EPARAM_CODEC_FORMAT, "Raspa: Unable to read codec format param from driver ")\
-    X(205, RASPA_EPARAM_PLATFORM_TYPE, "Raspa: Unable to read platform type param from driver ")\
-    X(206, RASPA_EPARAM_VERSION, "Raspa: Unable to read driver version param from driver ")\
-    X(207, RASPA_EPARAM_BUFFER_SIZE, "Raspa: Unable to access buffer size param of driver ")\
-    X(208, RASPA_EALSA_INIT_FAILED, "Raspa: Alsa usb init failed ")\
-    X(209, RASPA_EGPIO_UNSUPPORTED, "Raspa: Unsupported gpio requested ")\
-    X(210, RASPA_EPARAM_USB_AUDIO_TYPE, "Raspa: Unable to read usb audio type param from driver ")\
-    X(211, RASPA_EUSBAUDIO_TYPE, "Raspa: Unsupported usb audio type ")\
+    X(0,   RASPA_SUCCESS, "Raspa: No error.")\
+    X(100, RASPA_EBUFFER_SIZE_MISMATCH, "Raspa: Buffer size mismatch with driver.")\
+    X(101, RASPA_EVERSION, "Raspa: Version mismatch with driver.")\
+    X(102, RASPA_ENOMEM, "Raspa: Failed to get buffers from driver.")\
+    X(103, RASPA_EUSER_BUFFERS, "Raspa: Failed to allocate user audio buffers.")\
+    X(104, RASPA_ETASK_AFFINITY, "Raspa: Failed to set affinity for RT task.")\
+    X(105, RASPA_ETASK_CREATE, "Raspa: Failed to create RT task.")\
+    X(106, RASPA_ETASK_START, "Raspa: Failed to start RT task.")\
+    X(107, RASPA_ETASK_STOP, "Raspa: Failed to stop RT task.")\
+    X(108, RASPA_ETASK_CANCEL, "Raspa: Failed to cancel RT task.")\
+    X(109, RASPA_EUNMAP, "Raspa: Failed to unmap driver buffers.")\
+    X(110, RASPA_EDEVICE_OPEN, "Raspa: Failed to open driver.")\
+    X(111, RASPA_EDEVICE_CLOSE, "Raspa: Failed to close driver.")\
+    X(112, RASPA_ECODEC_FORMAT, "Raspa: Unsupported codec format.")\
+    X(113, RASPA_EPLATFORM_TYPE, "Raspa: Unsupported platform type.")\
+    X(114, RASPA_EDEVICE_FIRMWARE, "Raspa: Incorrect firmware on external micro-controller.")\
+    X(115, RASPA_EDEVICE_INACTIVE, "Raspa: External micro-controller not responding.")\
+    X(116, RASPA_EINSOCKET_CREATION, "Raspa: Failed to create input socket for gpio data communication.")\
+    X(117, RASPA_EOUTSOCKET_CREATION, "Raspa: Failed to create output socket for gpio data communication.")\
+    X(118, RASPA_EINSOCKET_BIND, "Raspa: Failed to bind input socket to address.")\
+    X(119, RASPA_EINSOCKET_TIMEOUT, "Raspa: Failed to set input socket to address.")\
+    X(120, RASPA_EMLOCKALL, "Raspa: Failed to lock memory needed to prevent page swapping.")\
+    X(121, RASPA_EBUFFER_SIZE_INVALID, "Raspa: driver configured with invalid buffer size.")\
+    X(122, RASPA_EBUFFER_SIZE_SC, "Raspa: sample converter does not suppot specified buffer size.")\
+    X(200, RASPA_EPARAM, "Raspa: Unable to param from driver.")\
+    X(201, RASPA_EPARAM_SAMPLERATE, "Raspa: Unable to read sample rate param from driver.")\
+    X(202, RASPA_EPARAM_INPUTCHANS, "Raspa: Unable to read num input chans param from driver.")\
+    X(203, RASPA_EPARAM_OUTPUTCHANS, "Raspa: Unable to read num output chans param from driver.")\
+    X(204, RASPA_EPARAM_CODEC_FORMAT, "Raspa: Unable to read codec format param from driver.")\
+    X(205, RASPA_EPARAM_PLATFORM_TYPE, "Raspa: Unable to read platform type param from driver.")\
+    X(206, RASPA_EPARAM_VERSION, "Raspa: Unable to read driver version param from driver.")\
+    X(207, RASPA_EPARAM_BUFFER_SIZE, "Raspa: Unable to access buffer size param of driver.")\
+    X(208, RASPA_EALSA_INIT_FAILED, "Raspa: Alsa usb init failed.")\
+    X(209, RASPA_EGPIO_UNSUPPORTED, "Raspa: Unsupported gpio requested.")\
+    X(210, RASPA_EPARAM_USB_AUDIO_TYPE, "Raspa: Unable to read usb audio type param from driver.")\
+    X(211, RASPA_EUSBAUDIO_TYPE, "Raspa: Unsupported usb audio type.")\
     X(212, RASPA_EDEVICE_INVALID_CONFIG_FILE, "Raspa: Driver cannot find one or more conf files. See dmesg.")\
     X(213, RASPA_ERUNLOG_FILE_OPEN, "Raspa: Error opening the run log file.")\
     X(214, RASPA_ERUNLOG_FILE_CLOSE, "Raspa: Error closing the run log file.")\
+    X(215, RASPA_EPARAM_INPUT_AUDIO_INFO, "Raspa: Unable to read input audio info from driver.")\
+    X(216, RASPA_EPARAM_OUTPUT_AUDIO_INFO, "Raspa: Unable to read output audio info from driver.")\
 
 /**
  * @brief Macro to define the error codes as enums

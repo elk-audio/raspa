@@ -252,6 +252,7 @@ public:
             return -RASPA_EMLOCKALL;
         }
 #endif
+        evl_init();
         _kernel_buffer_mem_size = NUM_PAGES_KERNEL_MEM * getpagesize();
 
         return RASPA_SUCCESS;

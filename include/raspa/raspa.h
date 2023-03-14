@@ -26,10 +26,9 @@
 extern "C" {
 #endif
 
-// defines the api version
-#define RASPA_VERSION_MAJ 0
-#define RASPA_VERSION_MIN 2
-#define RASPA_VERSION_REV 0
+#define RASPA_VERSION_MAJ 1 // denotes the api version
+#define RASPA_VERSION_MIN 0 // the features / extention set
+#define RASPA_VERSION_REV 0 // used for bug fixes
 
 // default log file path
 #define RASPA_DEFAULT_RUN_LOG_FILE     "/tmp/raspa.log"

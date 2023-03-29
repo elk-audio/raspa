@@ -539,7 +539,7 @@ public:
 
     int close_device()
     {
-        _stop_request_flag = true;
+        _stop_request_flag = true;  // this will also trigger audio buffers clear
 
         if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
@@ -548,6 +548,7 @@ public:
         }
 
         // Wait sometime for periodic task to send mute command to device
+        // and for the buffers to be cleared
         usleep(STOP_REQUEST_DELAY_US);
 
         auto res = __RASPA(ioctl(_device_handle, RASPA_PROC_STOP));
@@ -1514,16 +1515,23 @@ protected:
 #endif
             }
 
-            // Store CV gate in
-            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
+            if (_stop_request_flag)
+            {
+                _clear_driver_buffers();
+            }
+            else
+            {
+                // Store CV gate in
+                _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
-            _parse_rx_pkt(_rx_pkt[_buf_idx]);
-            _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
-                                   _driver_buffer_audio_out[_buf_idx]);
-            _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
+                _parse_rx_pkt(_rx_pkt[_buf_idx]);
+                _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
+                                    _driver_buffer_audio_out[_buf_idx]);
+                _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
 
-            // Set gate out info in tx packet
-            audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
+                // Set gate out info in tx packet
+                audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
+            }
 
             __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,
@@ -1582,16 +1590,23 @@ protected:
             auto correction_ns = _process_timing_error_with_downsampling(
                                 timing_error_ns);
 
-            // Store CV gate in
-            _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
+            if (_stop_request_flag)
+            {
+                _clear_driver_buffers();
+            }
+            else
+            {
+                // Store CV gate in
+                _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
-            _parse_rx_pkt(_rx_pkt[_buf_idx]);
-            _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
-                                   _driver_buffer_audio_out[_buf_idx]);
-            _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
+                _parse_rx_pkt(_rx_pkt[_buf_idx]);
+                _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
+                                    _driver_buffer_audio_out[_buf_idx]);
+                _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);
 
-            // Set gate out info in tx packet
-            audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
+                // Set gate out info in tx packet
+                audio_ctrl::set_gate_out_val(_tx_pkt[_buf_idx], _user_gate_out);
+            }
 
             res = __RASPA_IOCTL_RT(ioctl(_device_handle,
                            RASPA_USERPROC_FINISHED,

@@ -48,8 +48,9 @@ constexpr float INT32_TO_FLOAT_SCALING_FACTOR =
 constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
 constexpr int SUPPORTED_BUFFER_SIZES[] = {8, 16, 32, 48, 64, 128, 192, 256, 512};
 
+
 // Macro to iterate through all possible buffer size and stride combinations and return the right instantiation of
-// the sample converter
+// the sample converter. CONVERTER_SUPPORTED_BUFFER_SIZE must reflect buffer sizes supported.
 #define GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, stride)     \
 switch (buffer_size)                                                                                     \
 {                                                                                                        \
@@ -112,6 +113,12 @@ switch(stride)                                                                  
         break;                                                                                           \
     case 16:                                                                                             \
         GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 16);        \
+        break;                                                                                           \
+    case 24:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 24);        \
+        break;                                                                                           \
+    case 32:                                                                                             \
+        GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, 32);        \
         break;                                                                                           \
 default:                                                                                                 \
     return std::unique_ptr<BaseSampleConverter>(nullptr);                                                \

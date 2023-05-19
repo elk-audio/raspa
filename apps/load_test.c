@@ -32,7 +32,7 @@
 
 // default parameter values
 #define DEFAULT_CPU                     -1
-#define DEFAULT_NUM_FRAMES              32
+#define DEFAULT_NUM_FRAMES              64
 #define DEFAULT_INPUT_CHANNEL           0
 #define DEFAULT_OUTPUT_CHANNEL          0
 #define DEFAULT_BIQUAD_NUM              128

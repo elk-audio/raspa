@@ -28,7 +28,7 @@
 
 #include "raspa/raspa.h"
 
-#define DEFAULT_NUM_FRAMES 32
+#define DEFAULT_NUM_FRAMES 64
 
 static int num_frames = DEFAULT_NUM_FRAMES;
 static int log_file_enabled = 0;

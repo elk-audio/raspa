@@ -459,7 +459,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    printf("Loopback audio process started.\n");
+    printf("Load test audio process started.\n");
     raspa_start_realtime();
 
     // Non-RT processing loop

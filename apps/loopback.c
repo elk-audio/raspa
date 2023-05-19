@@ -165,8 +165,6 @@ int main(int argc, char *argv[])
             break;
     }
 
-    printf("\nRunning with mode %d and with a buffer size of %d.\n", mode, num_frames);
-
     res = raspa_init();
     if (res < 0)
     {
@@ -212,7 +210,7 @@ int main(int argc, char *argv[])
         break;
     }
 
-    printf("Loopback audio process started.\n");
+    printf("Loopback audio process started (mode %d).\n", mode);
     raspa_start_realtime();
 
     // Non-RT processing loop

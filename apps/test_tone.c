@@ -83,11 +83,6 @@ int main(int argc, char *argv[])
 {
     int res = 0;
     int option = 0;
-    if (argc < 2)
-    {
-        printf("\nRunning default buffer size of %d\n", DEFAULT_NUM_FRAMES);
-        printf("For help use %s [-h]\n", argv[0]);
-    }
 
     // Argument parsing
     while ((option = getopt(argc, argv, "hb:l")) != -1)

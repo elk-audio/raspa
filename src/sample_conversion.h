@@ -34,23 +34,31 @@ namespace raspa {
 /**
  * scaling factors for 24 bit samples
  */
-constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388607.0f;  // 2**23 - 1
+constexpr float FLOAT_TO_INT24_SCALING_FACTOR = 8388608.0f;  // 2**23
 constexpr float INT24_TO_FLOAT_SCALING_FACTOR =
-                    1.19209304e-07f;  // 1.0 / (2**23 - 1)
+                    1.1920928955078e-07f;  // 1.0 / (2**23)
 
 /**
  * scaling factors for 32 bit samples
  */
-constexpr float FLOAT_TO_INT32_SCALING_FACTOR = 2147483647.0f;  // 2**31 - 1
+constexpr float FLOAT_TO_INT32_SCALING_FACTOR = 2147483648.0f;  // 2**31
 constexpr float INT32_TO_FLOAT_SCALING_FACTOR =
-                    4.656612875e-10f;  // 1.0 / (2**31 - 1)
+                    4.6566128731e-10f;  // 1.0 / (2**31)
 
-constexpr auto DEFAULT_CODEC_FORMAT = driver_conf::CodecFormat::INT24_LJ;
+/**
+ * floating point min and max values
+ */
+constexpr float FLOAT_MIN = -1.0f;
+constexpr float FLOAT_MAX = 9.999999e-01; // this is nextafterf(1.0f, 0), do not change to avoid rounding errors
+
+/**
+ * supported buffer size and strides
+ */
 constexpr int SUPPORTED_BUFFER_SIZES[] = {8, 16, 32, 48, 64, 128, 192, 256, 512};
-
+constexpr int SUPPORTED_STRIDES[] = {2, 4, 6, 8, 10, 12, 14, 16, 24, 32};
 
 // Macro to iterate through all possible buffer size and stride combinations and return the right instantiation of
-// the sample converter. CONVERTER_SUPPORTED_BUFFER_SIZE must reflect buffer sizes supported.
+// the sample converter. SUPPORTED_BUFFER_SIZES and SUPPORTED_STRIDES must reflect the supported values.
 #define GET_CONVERTER_WITH_BUFFER_SIZE(sw_chan_id, buffer_size, format, hw_chan_start_index, stride)     \
 switch (buffer_size)                                                                                     \
 {                                                                                                        \
@@ -224,13 +232,13 @@ public:
             {
                 float x = src[_sw_chan_start_index + n];
 
-                if (x < -1.0f)
+                if (x < FLOAT_MIN)
                 {
-                    x = -1.0f;
+                    x = FLOAT_MIN;
                 }
-                else if (x > 1.0f)
+                else if (x > FLOAT_MAX)
                 {
-                    x = 1.0f;
+                    x = FLOAT_MAX;
                 }
 
                 auto sample = _float32n_to_int32(x);
@@ -293,7 +301,7 @@ private:
      *
      * @param sample The integer sample in the range (2^(codec_res - 1) - 1) to
      *               (-2^(codec_res - 1))
-     * @return float Sample represented between -1.0 to 1.0
+     * @return float Sample represented between [ -1.0, 1.0 )
      */
     float _int32_to_float32n(int32_t sample)
     {
@@ -341,7 +349,7 @@ private:
      * @brief Converts a float sample to integer by taking into account the
      *        codec data resolution in bits.
      *
-     * @param sample Sample represented between -1.0 to 1.0
+     * @param sample Sample represented between [ -1.0  1.0 )
      * @return int32_t The integer sample in the range (2^(codec_res - 1) - 1)
      *                 to (-2^(codec_res - 1))
      */

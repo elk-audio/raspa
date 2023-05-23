@@ -47,8 +47,15 @@ set_property(TARGET test_runner PROPERTY CXX_STANDARD 17)
 
 add_test(test_runner unit_tests)
 
-
-add_custom_target(run_tests ALL
-    COMMAND "./test_runner"
-)
-add_dependencies(run_tests test_runner)
+# Execute tests if we are not cross-compiling
+if(NOT DEFINED CMAKE_CROSSCOMPILING)
+  set(CMAKE_CROSSCOMPILING "TRUE")
+endif()
+if(CMAKE_CROSSCOMPILING)
+    message(STATUS "Detected cross-compiling: skipping unit tests run.")
+else()
+    add_custom_target(run_tests ALL
+        COMMAND "./test_runner"
+    )
+    add_dependencies(run_tests test_runner)
+endif()

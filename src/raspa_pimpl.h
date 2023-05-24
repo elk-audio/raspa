@@ -39,6 +39,7 @@
     #include <sys/ioctl.h>
     #include <evl/syscall.h>
     #include <evl/clock.h>
+    #include <evl/thread.h>
 #else
     #include <cobalt/pthread.h>
     #include <cobalt/sys/ioctl.h>
@@ -171,7 +172,7 @@ public:
             _device_handle(-1),
             _interrupts_counter(0),
             _stop_request_flag(false),
-            _break_on_mode_sw(false),
+            _detect_mode_sw(false),
             _run_logger_enable(false),
             _run_logger_file_name(RASPA_DEFAULT_RUN_LOG_FILE),
             _cpu_affinity(DEFAULT_CPU_AFFINITY),
@@ -191,7 +192,8 @@ public:
             _platform_type(driver_conf::PlatformType::NATIVE),
             _error_filter_process_count(0),
             _usb_audio_type(DEFAULT_USB_AUDIO_TYPE),
-            _audio_packet_seq_num(0)
+            _audio_packet_seq_num(0),
+            _rt_task_id(0)
     {}
 
     ~RaspaPimpl()
@@ -305,7 +307,7 @@ public:
 
         if (debug_flags & RASPA_DEBUG_SIGNAL_ON_MODE_SW)
         {
-            _break_on_mode_sw = true;
+            _detect_mode_sw = true;
         }
 
         if (debug_flags & RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE)
@@ -455,6 +457,13 @@ public:
      */
     void rt_loop()
     {
+#ifdef RASPA_WITH_EVL
+        _rt_task_id = evl_attach_self("/raspa_pimpl_task:%d", getpid());
+        if (_rt_task_id < 0)
+        {
+            error(1, -_rt_task_id, "evl_attach_self() failed");
+        }
+#endif
         switch (_platform_type)
         {
         case driver_conf::PlatformType::NATIVE:
@@ -1453,6 +1462,8 @@ protected:
      */
     void _rt_loop_native()
     {
+        bool clear_thread_mode_on_stop = 0;
+        int evl_thread_mode_mask = T_WOSS;
         while (true)
         {
             auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
@@ -1462,19 +1473,38 @@ protected:
                 break;
             }
 
-            if (_break_on_mode_sw && _interrupts_counter > 1)
+            if (_detect_mode_sw)
             {
 #ifdef RASPA_WITH_EVL
-                // todo use evl_set_thread_mode()
+                res = evl_set_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+                if (res)
+                {
+                    error(1, -res, "evl_set_thread_mode failed");
+                    break;
+                }
+                clear_thread_mode_on_stop = true;
+                _detect_mode_sw = false;
 #else
                 pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
-                _break_on_mode_sw = 0;
+                _detect_mode_sw = false;
 #endif
             }
 
             // clear driver buffers if stop is requested
             if (_stop_request_flag)
             {
+#ifdef RASPA_WITH_EVL
+                if (clear_thread_mode_on_stop)
+                {
+                    res = evl_clear_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+                    if (res)
+                    {
+                        error(1, -res, "evl_clear_thread_mode failed");
+                        break;
+                    }
+                    clear_thread_mode_on_stop = false;
+                }
+#endif
                 _clear_driver_buffers();
             }
             else
@@ -1496,6 +1526,9 @@ protected:
      */
     void _rt_loop_async()
     {
+        bool clear_thread_mode_on_stop = 0;
+        int evl_thread_mode_mask = T_WOSS;
+
         while (true)
         {
             auto res = __RASPA_IOCTL_RT(ioctl(_device_handle,
@@ -1505,18 +1538,37 @@ protected:
                 break;
             }
 
-            if (_break_on_mode_sw && _interrupts_counter > 1)
+            if (_detect_mode_sw)
             {
 #ifdef RASPA_WITH_EVL
-                // todo use evl_set_thread_mode()
+                res = evl_set_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+                if (res)
+                {
+                    error(1, -res, "evl_set_thread_mode failed");
+                    break;
+                }
+                clear_thread_mode_on_stop = true;
+                _detect_mode_sw = false;
 #else
                 pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
-                _break_on_mode_sw = 0;
+                _detect_mode_sw = false;
 #endif
             }
 
             if (_stop_request_flag)
             {
+#ifdef RASPA_WITH_EVL
+                if (clear_thread_mode_on_stop)
+                {
+                    res = evl_clear_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+                    if (res)
+                    {
+                        error(1, -res, "evl_clear_thread_mode failed");
+                        break;
+                    }
+                    clear_thread_mode_on_stop = false;
+                }
+#endif
                 _clear_driver_buffers();
             }
             else
@@ -1545,6 +1597,9 @@ protected:
      */
     void _rt_loop_sync()
     {
+        bool clear_thread_mode_on_stop = 0;
+        int evl_thread_mode_mask = T_WOSS;
+
         // do not perform userspace callback before delay filter is settled
         while (_interrupts_counter < DELAY_FILTER_SETTLING_CONSTANT)
         {
@@ -1574,6 +1629,23 @@ protected:
             _interrupts_counter++;
         }
 
+        if (_detect_mode_sw)
+        {
+#ifdef RASPA_WITH_EVL
+            auto res = evl_set_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+            if (res)
+            {
+                error(1, -res, "evl_set_thread_mode failed");
+                return;
+            }
+            clear_thread_mode_on_stop = true;
+            _detect_mode_sw = false;
+#else
+            pthread_setmode_np(0, PTHREAD_WARNSW, NULL);
+            _detect_mode_sw = false;
+#endif
+        }
+
         // main run time loop
         while (true)
         {
@@ -1592,6 +1664,18 @@ protected:
 
             if (_stop_request_flag)
             {
+#ifdef RASPA_WITH_EVL
+                if (clear_thread_mode_on_stop)
+                {
+                    res = evl_clear_thread_mode(_rt_task_id, evl_thread_mode_mask, NULL);
+                    if (res)
+                    {
+                        error(1, -res, "evl_clear_thread_mode failed");
+                        break;
+                    }
+                    clear_thread_mode_on_stop = false;
+                }
+#endif
                 _clear_driver_buffers();
             }
             else
@@ -1648,7 +1732,7 @@ protected:
     bool _stop_request_flag;
 
     // flag to break on mode switch occurrence
-    bool _break_on_mode_sw;
+    bool _detect_mode_sw;
 
     // flag to enable logging of run data to file
     bool _run_logger_enable;
@@ -1705,19 +1789,13 @@ protected:
 
     // run logger instance
     RaspaRunLogger _run_logger;
+    int _rt_task_id;
 };
 
 static void* raspa_pimpl_task_entry(void* data)
 {
     auto pimpl = static_cast<RaspaPimpl*>(data);
-    int efd = evl_attach_self("/raspa_pimpl_task:%d", getpid());
-    if (efd < 0)
-    {
-        error(1, -efd, "evl_attach_self() failed");
-    }
-
     pimpl->rt_loop();
-
     // To suppress warnings
     return nullptr;
 }

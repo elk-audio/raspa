@@ -48,9 +48,6 @@ set_property(TARGET test_runner PROPERTY CXX_STANDARD 17)
 add_test(test_runner unit_tests)
 
 # Execute tests if we are not cross-compiling
-if(NOT DEFINED CMAKE_CROSSCOMPILING)
-  set(CMAKE_CROSSCOMPILING "TRUE")
-endif()
 if(CMAKE_CROSSCOMPILING)
     message(STATUS "Detected cross-compiling: skipping unit tests run.")
 else()

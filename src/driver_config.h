@@ -54,7 +54,7 @@ namespace driver_conf {
  * params
  */
 constexpr int REQUIRED_MAJ_VER = 1;
-constexpr int REQUIRED_MIN_VER = 0;
+constexpr int REQUIRED_MIN_VER = 1;
 
 /**
  * device paths

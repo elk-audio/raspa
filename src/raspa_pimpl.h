@@ -633,6 +633,7 @@ protected:
         _num_driver_output_chans = driver_conf::get_num_output_chan();
         auto platform_type = driver_conf::get_platform_type();
         auto usb_audio_type = driver_conf::get_usb_audio_type();
+        _cpu_affinity = driver_conf::get_audio_irq_affinity();
 
         // sanity checks on the parameters
         if (sample_rate < 0)

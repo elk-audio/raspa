@@ -81,6 +81,7 @@ constexpr char PLATFORM_TYPE_PARAM[] = "platform_type";
 constexpr char MAJ_VER_PARAM[] = "audio_ver_maj";
 constexpr char MIN_VER_PARAM[] = "audio_ver_min";
 constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
+constexpr char IRQ_AFFINITY[] = "audio_irq_affinity";
 
 /**
  * @brief Enumeration to denote various codec sample formats
@@ -258,6 +259,16 @@ int get_buffer_size()
 int get_usb_audio_type()
 {
     return read_driver_param(USB_AUDIO_TYPE_PARAM);
+}
+
+/**
+ * @brief Get the audio irq affinity param from the driver
+ *
+ * @return int (cpu num)
+ */
+int get_audio_irq_affinity()
+{
+    return read_driver_param(IRQ_AFFINITY);
 }
 
 /**

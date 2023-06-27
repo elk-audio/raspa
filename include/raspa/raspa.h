@@ -26,10 +26,12 @@
 extern "C" {
 #endif
 
-// defines the api version
-#define RASPA_VERSION_MAJ 0
-#define RASPA_VERSION_MIN 1
-#define RASPA_VERSION_REV 4
+#define RASPA_VERSION_MAJ 1 // denotes the api version
+#define RASPA_VERSION_MIN 1 // the features / extention set
+#define RASPA_VERSION_REV 0 // used for bug fixes
+
+// default log file path
+#define RASPA_DEFAULT_RUN_LOG_FILE     "/tmp/raspa.log"
 
 /**
  * @brief Convert error codes to human readable strings.
@@ -42,6 +44,11 @@ const char* raspa_get_error_msg(int code);
  * @brief Debug flag, signal debugger if a modeswith is detected.
  */
 #define RASPA_DEBUG_SIGNAL_ON_MODE_SW   (1<<0)
+
+/**
+ * @brief Debug flag, enable logging of the run period data to file
+ */
+#define RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE  (1<<1)
 
 typedef int64_t RaspaMicroSec;
 
@@ -60,6 +67,24 @@ typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
  * @return 0 in case of success, linux error code otherwise
  */
 int raspa_init();
+
+/**
+ * @brief Set the run log file path. Path will be used by the open function to create
+ *        a new run log file if logging is enabled with RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE
+ *        debug flag.
+ *        Default path is set by RASPA_DEFAULT_RUN_LOG_FILE.
+ *
+ * @param path Path of the logging file
+ */
+void raspa_set_run_log_file(const char *path);
+
+/**
+ * @brief Set RASPA RT thread CPU affinity. This function must be called before calling raspa_open().
+ *        Default affinity is 0.
+ *
+ * @param affinity CPU affinity of the RASPA RT thread
+ */
+void raspa_set_cpu_affinity(int affinity);
 
 /**
  * @brief Open device and check configuration with driver & audio controller
@@ -151,6 +176,31 @@ uint32_t raspa_get_gate_values();
  * @param cv_gates_out packed into a 32 bit uint
  */
 void raspa_set_gate_values(uint32_t cv_gates_out);
+
+/**
+ * @brief Request a gpio for real-time context handling
+ *
+ * @param pin_num
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_request_out_gpio(int pin_num);
+
+/**
+ * @brief Set pin_num gpio in real-time context
+ *
+ * @param pin_num
+ * @param val
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_set_gpio(int pin_num, int val);
+
+/**
+ * @brief Free the gpios requested
+ *
+ * @param pin_num
+ * @return Return 0 on success, -RASPA_EGPIO_UNSUPPORTED otherwise.
+ */
+int raspa_free_gpio(int pin_num);
 
 #ifdef __cplusplus
 }

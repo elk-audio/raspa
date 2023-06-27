@@ -34,12 +34,22 @@ int raspa_init()
     return raspa_pimpl.init();
 }
 
+void raspa_set_run_log_file(const char *path)
+{
+    raspa_pimpl.set_run_log_file(path);
+}
+
+void raspa_set_cpu_affinity(int affinity)
+{
+    raspa_pimpl.set_cpu_affinity(affinity);
+}
+
 int raspa_open(int buffer_size,
                RaspaProcessCallback process_callback,
                void* user_data,
                unsigned int debug_flags)
 {
-    return raspa_pimpl.open(buffer_size,
+    return raspa_pimpl.open_device(buffer_size,
                             process_callback,
                             user_data,
                             debug_flags);
@@ -82,7 +92,7 @@ RaspaMicroSec raspa_get_output_latency()
 
 int raspa_close()
 {
-    return raspa_pimpl.close();
+    return raspa_pimpl.close_device();
 }
 
 uint32_t raspa_get_gate_values()
@@ -93,4 +103,19 @@ uint32_t raspa_get_gate_values()
 void raspa_set_gate_values(uint32_t cv_gates_out)
 {
     raspa_pimpl.set_gate_values(cv_gates_out);
+}
+
+int raspa_request_out_gpio(int pin_num)
+{
+    return raspa_pimpl.request_out_gpio(pin_num);
+}
+
+int raspa_set_gpio(int pin_num, int val)
+{
+    return raspa_pimpl.set_gpio(pin_num, val);
+}
+
+int raspa_free_gpio(int pin_num)
+{
+    return raspa_pimpl.free_gpio(pin_num);
 }

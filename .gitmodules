@@ -1,6 +1,6 @@
 [submodule "test/gtest"]
 	path = test/gtest
 	url = https://github.com/google/googletest.git
-[submodule "audio-control-protocol"]
+[submodule "audio_control_protocol"]
 	path = audio-control-protocol
-	url = https://github.com/elk-audio/audio-control-protocol.git
+	url = ../audio-control-protocol.git

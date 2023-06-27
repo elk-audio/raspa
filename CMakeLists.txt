@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.18)
 project(raspalib)
 
 #################################
@@ -8,8 +8,9 @@ project(raspalib)
 # These can be overriden by ccmake, commandline args or using
 # set(BUILD_OPTION <new value> CACHE <type> "") in an including project
 
-option(RASPA_WITH_APPS "Build included applications" OFF)
-option(RASPA_WITH_TESTS "Build and run unit tests" ON)
+option(RASPA_WITH_APPS "Build included applications" ON)
+option(RASPA_WITH_TESTS "Build and run unit tests" OFF)
+option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" ON)
 
 #######################
 #  Cross compilation  #
@@ -65,15 +66,22 @@ set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)
 set(RASPALIB_SOURCE_FILES "${RASPALIB_COMPILATION_UNITS}" "${RASPALIB_EXTRA_CLION_SOURCES}")
 
 add_library(raspa STATIC ${RASPALIB_SOURCE_FILES})
-add_xenomai_to_target(raspa)
+
+if (${RASPA_WITH_EVL})
+    target_compile_definitions(raspa PUBLIC -DRASPA_WITH_EVL)
+    target_link_libraries(raspa PRIVATE evl)
+else()
+    add_xenomai_to_target(raspa)
+endif()
 
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
-
-target_link_libraries(raspa PRIVATE pthread audio_control_protocol fifo)
-
 set_property(TARGET raspa PROPERTY CXX_STANDARD 17)
 target_compile_options(raspa PRIVATE -Wall -Wextra -ffast-math -feliminate-unused-debug-types -fno-exceptions)
+
+set(RASPALIB_LINKED_LIBS pthread audio_control_protocol fifo asound)
+
+target_link_libraries(raspa PRIVATE ${RASPALIB_LINKED_LIBS})
 
 #############
 #  Install  #

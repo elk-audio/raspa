@@ -32,21 +32,20 @@
 
 #define DEFAULT_NUM_FRAMES 64
 
-#define PULSE_PERIOD 0.5
+#define PULSE_PERIOD 1.0
 #define PULSE_DURATION 200E-6f
 
-struct pulse_generator
+enum pulse_state
 {
-    int period;
-    int period_counter;
-    int duration;
-    int duration_counter;
+    RESET,
+    ACTIVE,
+    NOT_ACTIVE,
 };
 
-struct delay_measurement
+struct latency_measurement
 {
     int measured_value;
-    int counter;
+    int count;
     int captured;
 };
 
@@ -57,9 +56,9 @@ static int log_file_enabled = 0;
 static int stop_flag = 0;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
-
-static struct pulse_generator pulse;
-static struct delay_measurement *measurements = NULL;
+static struct latency_measurement *measurements = NULL;
+static enum pulse_state pulse_state = RESET;
+static int pulse_count = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
@@ -106,7 +105,7 @@ void print_usage(char *argv[])
            "        Please note that with analog loopback you may need to invert the output phase with the -p option if the analog path is inverting.\n\n");
 }
 
-void print_delays(void)
+void print_latency(void)
 {
     int channel_idx;
     float period_msec = 1000.0f / raspa_get_sampling_rate();
@@ -114,9 +113,10 @@ void print_delays(void)
     printf("\n%" PRId64 " samples elapsed\n", raspa_get_samplecount());
     for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
     {
-        if (measurements[channel_idx].measured_value >= 0)
+        int latency = measurements[channel_idx].measured_value;
+        if (latency >= 0)
         {
-            printf("Channel %d: %d samples (%f msec)\n", channel_idx, measurements[channel_idx].measured_value, measurements[channel_idx].measured_value * period_msec);
+            printf("Channel %d: %d samples (%f msec)\n", channel_idx, latency, latency * period_msec);
         }
         else
         {
@@ -125,16 +125,30 @@ void print_delays(void)
     }
 }
 
-void measure_reset(void)
+void reset_measure(void)
+{
+    int channel_idx;
+
+    for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
+    {
+        measurements[channel_idx].captured = 0;
+        measurements[channel_idx].count = 0;
+    }
+}
+
+void reset_print(void)
 {
     int channel_idx;
 
     for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
     {
         measurements[channel_idx].measured_value = -1;
-        measurements[channel_idx].counter = 0;
-        measurements[channel_idx].captured = 0;
     }
+}
+
+int pulse_active(void)
+{
+    return pulse_state == ACTIVE ? 1 : 0;
 }
 
 int measure_run(int channel_idx, float value)
@@ -143,45 +157,44 @@ int measure_run(int channel_idx, float value)
     {
         if (value > 0.5f)
         {
-            measurements[channel_idx].measured_value = measurements[channel_idx].counter;
+            measurements[channel_idx].measured_value = measurements[channel_idx].count;
             measurements[channel_idx].captured = 1;
         }
         else
         {
-            measurements[channel_idx].counter++;
+            measurements[channel_idx].count++;
         }
     }
 
     return (value > 0.5f) ? 1 : 0;
 }
 
-void pulse_run(void)
+void update_state(void)
 {
-    int channel_idx;
-
-    pulse.period_counter++;
-    if (pulse.period_counter == pulse.period)
+    switch (pulse_state)
     {
-        pulse.period_counter = 0;
-        pulse.duration_counter = 1; // start pulse
-        measure_reset();
-    }
-    else
-    {
-        if (pulse.duration_counter == pulse.duration)
+    case RESET:
+        reset_measure();
+        pulse_count = 0;
+        pulse_state++;
+        break;
+    case ACTIVE:
+        if (++pulse_count >= raspa_get_sampling_rate() * PULSE_DURATION)
         {
-            pulse.duration_counter = 0;
+            pulse_count = 0;
+            pulse_state++;
         }
-        else if (pulse.duration_counter)
+        break;
+    case NOT_ACTIVE:
+        if (++pulse_count >= raspa_get_sampling_rate() * (PULSE_PERIOD - PULSE_DURATION))
         {
-            pulse.duration_counter++;
+            pulse_count = 0;
+            pulse_state = RESET;
         }
+        break;
+    default:
+        break;
     }
-}
-
-int pulse_active(void)
-{
-    return (pulse.duration_counter > 0) ? 1 : 0;
 }
 
 void process(float* input, float* output, __attribute__((unused)) void* data)
@@ -191,17 +204,12 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
 
     for (frame = 0; frame < num_frames; frame++)
     {
-        pulse_run();
+        update_state();
+
         for (channel_idx = 0; channel_idx < num_output_chans; channel_idx++)
         {
-            if (pulse_active())
-            {
-                output[frame + channel_idx*num_frames] = invert_phase_enabled ? -1.0f : 1.0f;
-            }
-            else
-            {
-                output[frame + channel_idx*num_frames] = 0;
-            }
+            float output_value = pulse_active() ? 1.0f : 0;
+            output[frame + channel_idx*num_frames] = invert_phase_enabled ? -output_value : output_value;
         }
 
         for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
@@ -218,7 +226,6 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
 
 int main(int argc, char *argv[])
 {
-    float sample_rate;
     int res = 0;
     int option = 0;
     RaspaProcessCallback raspa_callback = NULL;
@@ -256,10 +263,18 @@ int main(int argc, char *argv[])
         }
     }
 
+    measurements = calloc(num_input_chans, sizeof(struct latency_measurement));
+    if (measurements == NULL)
+    {
+        fprintf(stderr, "Error allocating memory\n");
+        exit(-1);
+    }
+    reset_print();
+
     res = raspa_init();
     if (res < 0)
     {
-        printf("Error initializing RASPA:%s\n", strerror(-res));
+        fprintf(stderr, "Error initializing RASPA:%s\n", strerror(-res));
         exit(res);
     }
 
@@ -275,15 +290,6 @@ int main(int argc, char *argv[])
     num_input_chans = raspa_get_num_input_channels();
     num_output_chans = raspa_get_num_output_channels();
 
-    sample_rate = raspa_get_sampling_rate();
-    pulse.period = sample_rate * PULSE_PERIOD;
-    pulse.duration = sample_rate * PULSE_DURATION;
-    pulse.period_counter = 0;
-    pulse.duration_counter = 0;
-
-    measurements = calloc(num_input_chans, sizeof(struct delay_measurement));
-    measure_reset();
-
     printf("Latency measure process started\n");
     raspa_start_realtime();
 
@@ -291,7 +297,8 @@ int main(int argc, char *argv[])
     while (stop_flag == 0)
     {
         sleep(1);
-        print_delays();
+        print_latency();
+        reset_print();
     }
     printf("\nClosing audio process...\n");
 

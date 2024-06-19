@@ -82,7 +82,8 @@ void print_usage(char *argv[])
     printf("    -b <buffer size> : Specify the audio buffer size. \n"
            "                       Default is %d. Ideally should be a power of 2.\n", DEFAULT_NUM_FRAMES);
     printf("    -p               : Invert output phase.\n");
-    printf("    -w               : Write inverted input to output while detecting positive pulse.\n");
+    printf("    -w               : Write inverted input to output while detecting positive pulse.\n"
+           "                       The inverted pulse has amplitude -0.5 * input.\n");
     printf("    -l               : Enable logging to %s.\n\n", RASPA_DEFAULT_RUN_LOG_FILE);
     printf("    Stop the program with SIGINT\n\n");
     printf("Typical usage:\n\n");
@@ -217,7 +218,7 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
             float input_value = input[frame + channel_idx*num_frames];
             if (measure_run(channel_idx, input_value) && (channel_idx < num_output_chans) && write_inverted_input_enabled)
             {
-                float output_value = -input_value;
+                float output_value = -0.5f * input_value;
                 output[frame + channel_idx*num_frames] += invert_phase_enabled ? -output_value : output_value;
             }
         }

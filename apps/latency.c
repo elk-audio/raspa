@@ -51,8 +51,8 @@ struct LatencyMeasurement
 };
 
 static int num_frames = DEFAULT_NUM_FRAMES;
-static bool invert_phase_enabled = false;
-static bool write_inverted_input_enabled = false;
+static bool invert_phase = false;
+static bool write_inverted_input = false;
 static bool log_file_enabled = false;
 static bool stop_flag = false;
 static int num_input_chans = 0;
@@ -213,16 +213,16 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
         for (channel_idx = 0; channel_idx < num_output_chans; channel_idx++)
         {
             float output_value = pulse_active() ? 1.0f : 0;
-            output[frame + channel_idx*num_frames] = invert_phase_enabled ? -output_value : output_value;
+            output[frame + channel_idx*num_frames] = invert_phase ? -output_value : output_value;
         }
 
         for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
         {
             float input_value = input[frame + channel_idx*num_frames];
-            if (run_measurement(channel_idx, input_value) && (channel_idx < num_output_chans) && write_inverted_input_enabled)
+            if (run_measurement(channel_idx, input_value) && (channel_idx < num_output_chans) && write_inverted_input)
             {
                 float output_value = -0.5f * input_value;
-                output[frame + channel_idx*num_frames] += invert_phase_enabled ? -output_value : output_value;
+                output[frame + channel_idx*num_frames] += invert_phase ? -output_value : output_value;
             }
         }
     }
@@ -249,11 +249,11 @@ int main(int argc, char *argv[])
             break;
 
         case 'p' :
-            invert_phase_enabled = true;
+            invert_phase = true;
             break;
 
         case 'w' :
-            write_inverted_input_enabled = true;
+            write_inverted_input = true;
             break;
 
         case 'l' :

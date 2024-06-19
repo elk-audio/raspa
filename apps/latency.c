@@ -34,7 +34,7 @@
 #define PULSE_DURATION 200E-6f
 #define MEASUREMENT_DURATION 0.5f
 
-enum state
+enum State
 {
     RESET,
     MEASUREMENT_PULSE_ACTIVE,
@@ -42,7 +42,7 @@ enum state
     WAIT_PRINT,
 };
 
-struct latency_measurement
+struct LatencyMeasurement
 {
     int measured_value;
     int count;
@@ -56,8 +56,8 @@ static int log_file_enabled = 0;
 static int stop_flag = 0;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
-static struct latency_measurement *measurements = NULL;
-static enum state state = RESET;
+static struct LatencyMeasurement *measurements = NULL;
+static enum State state = RESET;
 static int pulse_count = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
@@ -266,7 +266,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    measurements = calloc(num_input_chans, sizeof(struct latency_measurement));
+    measurements = calloc(num_input_chans, sizeof(struct LatencyMeasurement));
     if (measurements == NULL)
     {
         fprintf(stderr, "Error allocating memory\n");

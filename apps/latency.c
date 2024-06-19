@@ -31,15 +31,15 @@
 #include "raspa/raspa.h"
 
 #define DEFAULT_NUM_FRAMES 64
-
-#define PULSE_PERIOD 1.0
 #define PULSE_DURATION 200E-6f
+#define MEASUREMENT_DURATION 0.5f
 
-enum pulse_state
+enum state
 {
     RESET,
-    ACTIVE,
-    NOT_ACTIVE,
+    MEASUREMENT_PULSE_ACTIVE,
+    MEASUREMENT_PULSE_NOT_ACTIVE,
+    WAIT_PRINT,
 };
 
 struct latency_measurement
@@ -57,7 +57,7 @@ static int stop_flag = 0;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
 static struct latency_measurement *measurements = NULL;
-static enum pulse_state pulse_state = RESET;
+static enum state state = RESET;
 static int pulse_count = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
@@ -91,7 +91,7 @@ void print_usage(char *argv[])
     printf("        1. Make a digital loopback on the PCM data lines (provided that they are in the same format).\n");
     printf("        2. Put an oscilloscope probe on the PCM output line.\n");
     printf("        3. Run the program without the -w option and read the measured latency from the console.\n"
-           "           You should see the PCM output data on the oscilloscope moving every %.1f seconds for a duration of %.3f msec.\n", PULSE_PERIOD, 1E3 * PULSE_DURATION);
+           "           You should see the PCM output data on the oscilloscope moving every ~1 second for a duration of %.3f msec.\n", 1E3 * PULSE_DURATION);
     printf("        4. Now run it again enabling the -w option and check the oscilloscope.\n"
            "           You should be able to detect the generated pattern (that is inverted input but only when trigger is detected)\n"
            "           and measure the I/O delay using the oscilloscope. It should be exactly equal to the one printed.\n\n");
@@ -99,7 +99,7 @@ void print_usage(char *argv[])
     printf("        1. Make an analog loopback in the Codec (output N -> input N). Usually the 1st output to the 1st input is enough.\n");
     printf("        2. Put an oscilloscope on one of the loopback channels.\n");
     printf("        3. Run the program without the -w option and read the measured latency from the console.\n"
-           "           You should see the PCM output data on the oscilloscope moving every %.1f seconds for a duration of about %.3f msec.\n", PULSE_PERIOD, 1E3 * PULSE_DURATION);
+           "           You should see the PCM output data on the oscilloscope moving every ~1 second for a duration of about %.3f msec.\n", 1E3 * PULSE_DURATION);
     printf("        4. Now run it again enabling the -w option and check the oscilloscope.\n"
            "           You should be able to detect the generated pattern (that is inverted input but only when trigger is detected)\n"
            "           and measure the analog I/O delay using the oscilloscope.\n"
@@ -126,7 +126,7 @@ void print_latency(void)
     }
 }
 
-void reset_measure(void)
+void reset_measurements(void)
 {
     int channel_idx;
 
@@ -134,25 +134,21 @@ void reset_measure(void)
     {
         measurements[channel_idx].captured = 0;
         measurements[channel_idx].count = 0;
-    }
-}
-
-void reset_print(void)
-{
-    int channel_idx;
-
-    for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
-    {
         measurements[channel_idx].measured_value = -1;
     }
 }
 
 int pulse_active(void)
 {
-    return pulse_state == ACTIVE ? 1 : 0;
+    return state == MEASUREMENT_PULSE_ACTIVE ? 1 : 0;
 }
 
-int measure_run(int channel_idx, float value)
+int need_to_print(void)
+{
+    return state == WAIT_PRINT ? 1 : 0;
+}
+
+int run_measurement(int channel_idx, float value)
 {
     if (!measurements[channel_idx].captured)
     {
@@ -172,30 +168,36 @@ int measure_run(int channel_idx, float value)
 
 void update_state(void)
 {
-    switch (pulse_state)
+    switch (state)
     {
     case RESET:
-        reset_measure();
+        reset_measurements();
         pulse_count = 0;
-        pulse_state++;
+        state++;
         break;
-    case ACTIVE:
+    case MEASUREMENT_PULSE_ACTIVE:
         if (++pulse_count >= raspa_get_sampling_rate() * PULSE_DURATION)
         {
             pulse_count = 0;
-            pulse_state++;
+            state++;
         }
         break;
-    case NOT_ACTIVE:
-        if (++pulse_count >= raspa_get_sampling_rate() * (PULSE_PERIOD - PULSE_DURATION))
+    case MEASUREMENT_PULSE_NOT_ACTIVE:
+        if (++pulse_count >= raspa_get_sampling_rate() * (MEASUREMENT_DURATION - PULSE_DURATION))
         {
             pulse_count = 0;
-            pulse_state = RESET;
+            state++;
         }
         break;
+    case WAIT_PRINT:
     default:
         break;
     }
+}
+
+void reset_state(void)
+{
+    state = RESET;
 }
 
 void process(float* input, float* output, __attribute__((unused)) void* data)
@@ -216,7 +218,7 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
         for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
         {
             float input_value = input[frame + channel_idx*num_frames];
-            if (measure_run(channel_idx, input_value) && (channel_idx < num_output_chans) && write_inverted_input_enabled)
+            if (run_measurement(channel_idx, input_value) && (channel_idx < num_output_chans) && write_inverted_input_enabled)
             {
                 float output_value = -0.5f * input_value;
                 output[frame + channel_idx*num_frames] += invert_phase_enabled ? -output_value : output_value;
@@ -270,7 +272,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error allocating memory\n");
         exit(-1);
     }
-    reset_print();
+    reset_state();
 
     res = raspa_init();
     if (res < 0)
@@ -298,8 +300,11 @@ int main(int argc, char *argv[])
     while (stop_flag == 0)
     {
         sleep(1);
-        print_latency();
-        reset_print();
+        if (need_to_print())
+        {
+            print_latency();
+            reset_state();
+        }
     }
     printf("\nClosing audio process...\n");
 

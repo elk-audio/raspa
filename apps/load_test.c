@@ -46,11 +46,11 @@
 #define MEM_ALLOC_ALIGN                 (1 * 1024 * 1024)
 
 static int cpu = DEFAULT_CPU;
-static int stop_flag = 0;
+static bool stop_flag = false;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int log_file_enabled = 0;
+static bool log_file_enabled = false;
 static int input_channel = DEFAULT_INPUT_CHANNEL;
 static int output_channel = DEFAULT_OUTPUT_CHANNEL;
 static int num_biquad = DEFAULT_BIQUAD_NUM;
@@ -99,7 +99,7 @@ static struct
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    stop_flag = 1;
+    stop_flag = true;
 }
 
 void print_usage(char *argv[])
@@ -359,7 +359,7 @@ int main(int argc, char *argv[])
             break;
 
         case 'l' :
-            log_file_enabled = 1;
+            log_file_enabled = true;
             break;
 
         case 'i' :
@@ -463,7 +463,7 @@ int main(int argc, char *argv[])
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (stop_flag == 0)
+    while (!stop_flag)
     {
         sleep(1);
     }

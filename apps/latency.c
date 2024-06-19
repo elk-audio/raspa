@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -50,10 +51,10 @@ struct LatencyMeasurement
 };
 
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int invert_phase_enabled = 0;
-static int write_inverted_input_enabled = 0;
-static int log_file_enabled = 0;
-static int stop_flag = 0;
+static bool invert_phase_enabled = false;
+static bool write_inverted_input_enabled = false;
+static bool log_file_enabled = false;
+static bool stop_flag = false;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
 static struct LatencyMeasurement *measurements = NULL;
@@ -62,7 +63,7 @@ static int pulse_count = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    stop_flag = 1;
+    stop_flag = true;
 }
 
 void print_usage(char *argv[])
@@ -248,15 +249,15 @@ int main(int argc, char *argv[])
             break;
 
         case 'p' :
-            invert_phase_enabled = 1;
+            invert_phase_enabled = true;
             break;
 
         case 'w' :
-            write_inverted_input_enabled = 1;
+            write_inverted_input_enabled = true;
             break;
 
         case 'l' :
-            log_file_enabled = 1;
+            log_file_enabled = true;
             break;
 
         default:
@@ -297,7 +298,7 @@ int main(int argc, char *argv[])
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (stop_flag == 0)
+    while (!stop_flag)
     {
         sleep(1);
         if (need_to_print())

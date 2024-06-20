@@ -28,6 +28,7 @@
 #include <getopt.h>
 #include <math.h>
 #include <inttypes.h>
+#include <stdatomic.h>
 
 #include "raspa/raspa.h"
 
@@ -57,8 +58,10 @@ static bool log_file_enabled = false;
 static bool stop_flag = false;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
+static unsigned int num_measurements = 0;
 static struct LatencyMeasurement *measurements = NULL;
 static enum State state = RESET;
+static atomic_bool reset_state = false;
 static int pulse_count = 0;
 
 void sigint_handler(int __attribute__((unused)) sig)
@@ -112,7 +115,7 @@ void print_latency(void)
     int channel_idx;
     float period_msec = 1000.0f / raspa_get_sampling_rate();
 
-    printf("\n%" PRId64 " samples elapsed\n", raspa_get_samplecount());
+    printf("\nLatency measurement %u: %" PRId64 " samples elapsed\n", num_measurements, raspa_get_samplecount());
     for (channel_idx = 0; channel_idx < num_input_chans; channel_idx++)
     {
         int latency = measurements[channel_idx].measured_value;
@@ -169,10 +172,17 @@ int run_measurement(int channel_idx, float value)
 
 void update_state(void)
 {
+    bool reset = atomic_exchange(&reset_state, false);
+    if (reset)
+    {
+        state = RESET;
+    }
+
     switch (state)
     {
     case RESET:
         reset_measurements();
+        num_measurements++;
         pulse_count = 0;
         state++;
         break;
@@ -194,11 +204,6 @@ void update_state(void)
     default:
         break;
     }
-}
-
-void reset_state(void)
-{
-    state = RESET;
 }
 
 void process(float* input, float* output, __attribute__((unused)) void* data)
@@ -273,7 +278,6 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error allocating memory\n");
         exit(-1);
     }
-    reset_state();
 
     res = raspa_init();
     if (res < 0)
@@ -304,7 +308,7 @@ int main(int argc, char *argv[])
         if (need_to_print())
         {
             print_latency();
-            reset_state();
+            atomic_store(&reset_state, true);
         }
     }
     printf("\nClosing audio process...\n");

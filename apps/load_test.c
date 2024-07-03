@@ -419,17 +419,17 @@ int main(int argc, char *argv[])
         exit(res);
     }
 
-    if (cpu >= 0)
-    {
-        raspa_set_cpu_affinity(cpu);
-    }
-
     res = raspa_open(num_frames, process, 0, log_file_enabled ? RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE : 0);
     if (res < 0)
     {
         fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));
         free_mem();
         exit(res);
+    }
+
+    if (cpu >= 0)
+    {
+        raspa_set_cpu_affinity(cpu);
     }
 
     num_input_chans = raspa_get_num_input_channels();

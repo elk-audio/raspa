@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -32,17 +33,17 @@
 #define DEFAULT_NUM_FRAMES 64
 
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int log_file_enabled = 0;
+static bool log_file_enabled = false;
 static int num_output_chans = 0;
 static float sampling_rate = 0.0f;
 const static float output_gain = 0.7f;
 const static float output_freq = 440.0f;
 static int sample_counter = 0;
-static int stop_flag = 0;
+static bool stop_flag = false;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    stop_flag = 1;
+    stop_flag = true;
 }
 
 void print_usage(char *argv[])
@@ -99,7 +100,7 @@ int main(int argc, char *argv[])
             break;
 
         case 'l' :
-            log_file_enabled = 1;
+            log_file_enabled = true;
             break;
 
         default:
@@ -132,7 +133,7 @@ int main(int argc, char *argv[])
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (stop_flag == 0)
+    while (!stop_flag)
     {
         sleep(1);
     }

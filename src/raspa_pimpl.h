@@ -30,6 +30,7 @@
 #include <sys/sysinfo.h>
 #include <error.h>
 #include <errno.h>
+#include <vector>
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 

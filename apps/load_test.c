@@ -46,11 +46,11 @@
 #define MEM_ALLOC_ALIGN                 (1 * 1024 * 1024)
 
 static int cpu = DEFAULT_CPU;
-static int stop_flag = 0;
+static bool stop_flag = false;
 static int num_input_chans = 0;
 static int num_output_chans = 0;
 static int num_frames = DEFAULT_NUM_FRAMES;
-static int log_file_enabled = 0;
+static bool log_file_enabled = false;
 static int input_channel = DEFAULT_INPUT_CHANNEL;
 static int output_channel = DEFAULT_OUTPUT_CHANNEL;
 static int num_biquad = DEFAULT_BIQUAD_NUM;
@@ -60,25 +60,25 @@ static int delay_line_step = DEFAULT_DELAY_LINE_STEP;
 static int num_taps = DEFAULT_DELAY_LINE_TAPS;
 static int tap_delay = DEFAULT_DELAY_LINE_TAP_DELAY;
 
-struct biquad_k
+struct BiquadCoeffs
 {
     float a[2];
     float b[3];
     float gain;
 };
 
-struct biquad_d
+struct BiquadData
 {
     float z1;
     float z2;
 };
 
-struct delay_k
+struct DelayCoeffs
 {
     float gain;
 };
 
-struct delay_d
+struct DelayData
 {
     float *mem;
     size_t w_pos;
@@ -87,19 +87,19 @@ struct delay_d
 
 static struct
 {
-    struct biquad_k* biquad;
-    struct delay_k* delay;
+    struct BiquadCoeffs* biquad;
+    struct DelayCoeffs* delay;
 } k_mem;
 
 static struct
 {
-    struct biquad_d* biquad;
-    struct delay_d* delay;
+    struct BiquadData* biquad;
+    struct DelayData* delay;
 } d_mem;
 
 void sigint_handler(int __attribute__((unused)) sig)
 {
-    stop_flag = 1;
+    stop_flag = true;
 }
 
 void print_usage(char *argv[])
@@ -226,10 +226,10 @@ void biquad_init(void)
 {
     if (num_biquad > 0)
     {
-        k_mem.biquad = alloc_mem(num_biquad, sizeof(struct biquad_k));
+        k_mem.biquad = alloc_mem(num_biquad, sizeof(struct BiquadCoeffs));
         check_alloc(k_mem.biquad);
 
-        d_mem.biquad = alloc_mem(num_biquad, sizeof(struct biquad_d));
+        d_mem.biquad = alloc_mem(num_biquad, sizeof(struct BiquadData));
         check_alloc(d_mem.biquad);
 
         for (int i = 0; i < num_biquad; i++)
@@ -248,10 +248,10 @@ void delay_init(void)
 {
     if (num_delay > 0)
     {
-        k_mem.delay = alloc_mem(num_delay, sizeof(struct delay_k));
+        k_mem.delay = alloc_mem(num_delay, sizeof(struct DelayCoeffs));
         check_alloc(k_mem.delay);
 
-        d_mem.delay = alloc_mem(num_delay, sizeof(struct delay_d));
+        d_mem.delay = alloc_mem(num_delay, sizeof(struct DelayData));
         check_alloc(d_mem.delay);
 
         for (int i = 0; i < num_delay; i++)
@@ -286,8 +286,8 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
     // accumulate on the same output buffer
     for (int biquad = 0; biquad < num_biquad; biquad++)
     {
-        struct biquad_k *k = &k_mem.biquad[biquad];
-        struct biquad_d *d = &d_mem.biquad[biquad];
+        struct BiquadCoeffs *k = &k_mem.biquad[biquad];
+        struct BiquadData *d = &d_mem.biquad[biquad];
 
         for (int i = 0; i < num_frames; i++)
         {
@@ -309,8 +309,8 @@ void process(float* input, float* output, __attribute__((unused)) void* data)
     // accumulate on the same output buffer
     for (int delay_line = 0; delay_line < num_delay; delay_line++)
     {
-        struct delay_k *k = &k_mem.delay[delay_line];
-        struct delay_d *d = &d_mem.delay[delay_line];
+        struct DelayCoeffs *k = &k_mem.delay[delay_line];
+        struct DelayData *d = &d_mem.delay[delay_line];
 
         for (int i = 0; i < num_frames; i++)
         {
@@ -359,7 +359,7 @@ int main(int argc, char *argv[])
             break;
 
         case 'l' :
-            log_file_enabled = 1;
+            log_file_enabled = true;
             break;
 
         case 'i' :
@@ -419,17 +419,17 @@ int main(int argc, char *argv[])
         exit(res);
     }
 
-    if (cpu >= 0)
-    {
-        raspa_set_cpu_affinity(cpu);
-    }
-
     res = raspa_open(num_frames, process, 0, log_file_enabled ? RASPA_DEBUG_ENABLE_RUN_LOG_TO_FILE : 0);
     if (res < 0)
     {
         fprintf(stderr, "Error opening device: %s\n", raspa_get_error_msg(-res));
         free_mem();
         exit(res);
+    }
+
+    if (cpu >= 0)
+    {
+        raspa_set_cpu_affinity(cpu);
     }
 
     num_input_chans = raspa_get_num_input_channels();
@@ -463,7 +463,7 @@ int main(int argc, char *argv[])
     raspa_start_realtime();
 
     // Non-RT processing loop
-    while (stop_flag == 0)
+    while (!stop_flag)
     {
         sleep(1);
     }

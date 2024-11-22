@@ -1,4 +1,4 @@
-## 1.1.0
+## 1.2.0
 New features:
 * Added latency monitor app.
 * Refactored test applications.

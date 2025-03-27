@@ -172,7 +172,7 @@ enum class UsbAudioType : int
  * @param param_name The param name
  * @return int negative error code upon failure, >=0 upon success
  */
-int read_driver_param(const char* param_name)
+int inline read_driver_param(const char* param_name)
 {
     auto param_path = std::string(PARAM_ROOT_PATH) + param_name;
     std::string param_str(PARAM_VAL_STR_LEN, '\0');
@@ -206,7 +206,7 @@ int read_driver_param(const char* param_name)
  *
  * @return int The sample rate
  */
-int get_sample_rate()
+int inline get_sample_rate()
 {
     return read_driver_param(SAMPLE_RATE_PARAM);
 }
@@ -216,7 +216,7 @@ int get_sample_rate()
  *
  * @return int The number of input channels
  */
-int get_num_input_chan()
+int inline get_num_input_chan()
 {
     return read_driver_param(NUM_INPUT_CHANS_PARAM);
 }
@@ -226,7 +226,7 @@ int get_num_input_chan()
  *
  * @return int The number of output channels
  */
-int get_num_output_chan()
+int inline get_num_output_chan()
 {
     return read_driver_param(NUM_OUTPUT_CHANS_PARAM);
 }
@@ -236,7 +236,7 @@ int get_num_output_chan()
  *
  * @return int one of PlatformType
  */
-int get_platform_type()
+int inline get_platform_type()
 {
     return read_driver_param(PLATFORM_TYPE_PARAM);
 }
@@ -246,7 +246,7 @@ int get_platform_type()
  *
  * @return int one of PlatformType
  */
-int get_buffer_size()
+int inline get_buffer_size()
 {
     return read_driver_param(BUFFER_SIZE_PARAM);
 }
@@ -256,7 +256,7 @@ int get_buffer_size()
  *
  * @return int one of UsbAudioType
  */
-int get_usb_audio_type()
+int inline get_usb_audio_type()
 {
     return read_driver_param(USB_AUDIO_TYPE_PARAM);
 }
@@ -266,7 +266,7 @@ int get_usb_audio_type()
  *
  * @return int (cpu num)
  */
-int get_audio_irq_affinity()
+int inline get_audio_irq_affinity()
 {
     return read_driver_param(IRQ_AFFINITY);
 }
@@ -278,7 +278,7 @@ int get_audio_irq_affinity()
  * @return std::pair<bool, CodecFormat> true and CodecFormat if codec_format is valid
  *                                      false and CodecFormat::NONE if invalid
  */
-std::pair<bool, CodecFormat> check_codec_format(int codec_format)
+std::pair<bool, CodecFormat> inline  check_codec_format(int codec_format)
 {
     if (codec_format <= static_cast<int>(CodecFormat::NONE) ||
         codec_format >= static_cast<int>(CodecFormat::NUM_CODEC_FORMATS))
@@ -295,7 +295,7 @@ std::pair<bool, CodecFormat> check_codec_format(int codec_format)
  * @return std::pair<bool, int> false if version mismatches along with the
            mismatched version, true upon success
  */
-std::pair<bool, int> check_driver_version()
+std::pair<bool, int> inline check_driver_version()
 {
     auto major_ver = read_driver_param(MAJ_VER_PARAM);
     auto minor_ver = read_driver_param(MIN_VER_PARAM);

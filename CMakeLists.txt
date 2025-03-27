@@ -11,6 +11,7 @@ project(raspalib)
 option(RASPA_WITH_APPS "Build included applications" ON)
 option(RASPA_WITH_TESTS "Build and run unit tests" OFF)
 option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" ON)
+option(RASPA_WITH_PIPEWIRE "Build Raspa with integrated Pipewire bridge" ON)
 
 #######################
 #  Cross compilation  #
@@ -62,6 +63,10 @@ set(RASPALIB_EXTRA_CLION_SOURCES src/driver_config.h
                                  src/sample_conversion.h)
 
 set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)
+
+if (${RASPA_WITH_PIPEWIRE})
+    set(RASPALIB_COMPILATION_UNITS ${RASPALIB_COMPILATION_UNITS} src/raspa_pipewire_bridge.cpp)
+endif()
 
 set(RASPALIB_SOURCE_FILES "${RASPALIB_COMPILATION_UNITS}" "${RASPALIB_EXTRA_CLION_SOURCES}")
 

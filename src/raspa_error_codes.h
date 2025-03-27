@@ -77,6 +77,8 @@ constexpr char DRIVER_PARAM_ERROR_INFO[] = "The driver might not have been"
     X(214, RASPA_ERUNLOG_FILE_CLOSE, "Raspa: Error closing the run log file.")\
     X(215, RASPA_EPARAM_INPUT_AUDIO_INFO, "Raspa: Unable to read input audio info from driver.")\
     X(216, RASPA_EPARAM_OUTPUT_AUDIO_INFO, "Raspa: Unable to read output audio info from driver.")\
+    X(217, RASPA_EPIPEWIRE_INIT_FAILED, "Raspa: Pipewire bridge init failed.")\
+    X(218, RASPA_EPIPEWIRE_NOT_SUPPORTED, "Raspa: Pipewire not supported in this build.")\
 
 /**
  * @brief Macro to define the error codes as enums

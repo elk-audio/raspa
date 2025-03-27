@@ -384,7 +384,7 @@ private:
  * @param hw_chan_start_index The index in the integer buffer where the first sample of the channel is
  * @return std::unique_ptr<BaseSampleConverter> Instance to SampleConverter
  */
-std::unique_ptr<BaseSampleConverter> get_sample_converter(int sw_chan_id,
+std::unique_ptr<BaseSampleConverter> inline get_sample_converter(int sw_chan_id,
                                                           int buffer_size_in_frames,
                                                           driver_conf::CodecFormat codec_format,
                                                           int hw_chan_start_index,
@@ -421,6 +421,87 @@ std::unique_ptr<BaseSampleConverter> get_sample_converter(int sw_chan_id,
         break;
     }
 }
+
+/**
+ * @brief Copy audio data from interleaved to non-interleaved format
+ * @param interleaved_buf A pointer to source data in interleaved format.
+ * @param dest_buf A pointer to a buffer to copy to. channels will be laid out sequentially.
+ * @param channel_count The number of channels interleaved.
+ * @param size_in_frames The number of samples per channel.
+ */
+void inline copy_interleaved_to_non_interleaved(const float* interleaved_buf, float* dest_buf, int channel_count, int size_in_frames)
+{
+    switch (channel_count)
+    {
+        case 2:  // Most common case, others are mostly included for future compatibility
+        {
+            float* l_in = dest_buf;
+            float* r_in = dest_buf + size_in_frames;
+            for (int n = 0; n < size_in_frames; ++n)
+            {
+                *l_in++ = *interleaved_buf++;
+                *r_in++ = *interleaved_buf++;
+            }
+            break;
+        }
+        case 1:
+        {
+            std::copy(interleaved_buf, interleaved_buf + size_in_frames, dest_buf);
+            break;
+        }
+        default:
+        {
+            for (int n = 0; n < size_in_frames; ++n)
+            {
+                for (int c = 0; c < channel_count; ++c)
+                {
+                    dest_buf[n + c * channel_count] = *interleaved_buf++;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * @brief Copy audio data from non-interleaved to interleaved format
+ * @param interleaved_buf A pointer to source data with channel laid out sequentially.
+ * @param dest_buf A pointer to a buffer to copy the data in interleaved format to.
+ * @param channel_count The number of channels interleaved.
+ * @param size_in_frames The number of samples per channel.
+ */
+void inline copy_non_interleaved_to_interleaved(const float* src_buf, float* interleaved_buf, int channel_count, int size_in_frames)
+{
+    switch (channel_count)
+    {
+        case 2:  // Most common case, others are mostly included for future compatibility
+        {
+            const float* l_out = src_buf;
+            const float* r_out = src_buf + size_in_frames;
+            for (int n = 0; n < size_in_frames; ++n)
+            {
+                *interleaved_buf++ = *l_out++;
+                *interleaved_buf++ = *r_out++;
+            }
+            break;
+        }
+        case 1:
+        {
+            std::copy(src_buf, src_buf + size_in_frames, interleaved_buf);
+            break;
+        }
+        default:
+        {
+            for (int n = 0; n < size_in_frames; ++n)
+            {
+                for (int c = 0; c < channel_count; ++c)
+                {
+                    *interleaved_buf++ = src_buf[n + c * size_in_frames];
+                }
+            }
+        }
+    }
+}
+
 
 }  // namespace raspa
 

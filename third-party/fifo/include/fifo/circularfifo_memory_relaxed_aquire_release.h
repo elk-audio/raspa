@@ -51,6 +51,8 @@ public:
   bool wasFull() const;
   bool isLockFree() const;
 
+  int size() const;
+
 private:
   size_t increment(size_t idx) const; 
 
@@ -117,6 +119,21 @@ template<typename Element, size_t Size>
 size_t CircularFifo<Element, Size>::increment(size_t idx) const
 {
   return (idx + 1) % Capacity;
+}
+
+template<typename Element, size_t Size>
+int CircularFifo<Element, Size>::size() const
+{
+    const auto current_head = _head.load(std::memory_order_relaxed);
+    const auto current_tail = _tail.load(std::memory_order_relaxed);
+    if (current_head > current_tail)
+    {
+        return Size -1 - (current_head - current_tail);
+    }
+    else
+    {
+        return current_tail - current_head;
+    }
 }
 
 } // memory_relaxed_aquire_release

@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
         break;
     }
 
-    printf("Loopback audio process started (mode %d).\n", mode);
+    printf("Loopback audio process started (mode %d). %d/%d channels \n", mode, num_input_chans, num_output_chans);
     raspa_start_realtime();
 
     // Non-RT processing loop

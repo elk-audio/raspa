@@ -79,6 +79,15 @@ else()
     add_xenomai_to_target(raspa)
 endif()
 
+if (${RASPA_WITH_PIPEWIRE})
+    target_compile_definitions(raspa PUBLIC -DRASPA_WITH_PIPEWIRE)
+    target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/../pipewire/src/
+                                             ${PROJECT_SOURCE_DIR}/../pipewire/spa/include
+            ${CMAKE_SYSROOT}/usr/include/pipewire-0.3
+            ${CMAKE_SYSROOT}/usr/include/spa-0.2)
+    target_link_libraries(raspa PUBLIC pipewire-0.3)
+endif()
+
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/src/)
 set_property(TARGET raspa PROPERTY CXX_STANDARD 17)

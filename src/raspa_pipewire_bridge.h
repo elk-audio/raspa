@@ -48,6 +48,12 @@ public:
     }
 
 private:
+    enum class StreamDirection
+    {
+        IN,
+        OUT
+    };
+
     void _input_stream_callback();
 
     void _output_stream_callback();
@@ -60,9 +66,7 @@ private:
 
     void _init_fifos();
 
-    bool _create_input_stream();
-
-    bool _create_output_stream();
+    pw_stream* _create_stream(const char* name, int channels, pw_stream_events* events, StreamDirection type);
 
     pw_thread_loop* _loop{nullptr};
     pw_context*     _context{nullptr};

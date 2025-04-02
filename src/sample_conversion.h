@@ -464,7 +464,7 @@ void inline copy_interleaved_to_non_interleaved(const float* interleaved_buf, fl
 
 /**
  * @brief Copy audio data from non-interleaved to interleaved format
- * @param interleaved_buf A pointer to source data with channel laid out sequentially.
+ * @param interleaved_buf A pointer to source data with channels laid out sequentially.
  * @param dest_buf A pointer to a buffer to copy the data in interleaved format to.
  * @param channel_count The number of channels interleaved.
  * @param size_in_frames The number of samples per channel.

@@ -272,13 +272,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    measurements = calloc(num_input_chans, sizeof(struct LatencyMeasurement));
-    if (measurements == NULL)
-    {
-        fprintf(stderr, "Error allocating memory\n");
-        exit(-1);
-    }
-
     res = raspa_init();
     if (res < 0)
     {
@@ -297,6 +290,13 @@ int main(int argc, char *argv[])
 
     num_input_chans = raspa_get_num_input_channels();
     num_output_chans = raspa_get_num_output_channels();
+
+    measurements = calloc(num_input_chans, sizeof(struct LatencyMeasurement));
+    if (measurements == NULL)
+    {
+        fprintf(stderr, "Error allocating memory\n");
+        exit(-1);
+    }
 
     printf("Latency measure process started\n");
     raspa_start_realtime();

@@ -669,6 +669,22 @@ protected:
         auto usb_audio_type = driver_conf::get_usb_audio_type();
         _cpu_affinity = driver_conf::get_audio_irq_affinity();
 
+        auto pw_channels = driver_conf::get_pipewire_channels();
+        if (!pw_channels)
+        {
+            pw_channels = driver_conf::get_pipewire_config_from_file(driver_conf::PW_CONFIG_FILE_PATH);  // Get pipewire config from file
+        }
+        if (pw_channels)
+        {
+            _pw_input_channels = pw_channels->first;
+            _pw_output_channels = pw_channels->second;
+        }
+        else
+        {
+            _pw_input_channels = 0;
+            _pw_output_channels = 0;
+        }
+
         // sanity checks on the parameters
         if (sample_rate < 0)
         {
@@ -704,8 +720,7 @@ protected:
         _sample_rate = static_cast<float>(sample_rate);
 
         // set internal platform type
-        if (platform_type < static_cast<int>(driver_conf::PlatformType::
-                                                                 NATIVE) ||
+        if (platform_type < static_cast<int>(driver_conf::PlatformType::NATIVE) ||
             platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
         {
             _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE,
@@ -715,8 +730,7 @@ protected:
         _platform_type = static_cast<driver_conf::PlatformType>(platform_type);
 
         // Set usb audio type
-        if (usb_audio_type < static_cast<int>(driver_conf::UsbAudioType::
-                                                                 NONE) ||
+        if (usb_audio_type < static_cast<int>(driver_conf::UsbAudioType::NONE) ||
             usb_audio_type > static_cast<int>(driver_conf::UsbAudioType::EXTERNAL_UC))
         {
             _raspa_error_code.set_error_val(RASPA_EUSBAUDIO_TYPE,
@@ -736,7 +750,7 @@ protected:
         }
 
         // TODO - get the number of Pipewire channels from somewhere instead of hardcoding it
-        if (DEFAULT_PW_INPUT_CHANNELS > 0 || DEFAULT_PW_OUTPUT_CHANNELS > 0)
+        if (_pw_input_channels > 0 || _pw_output_channels > 0)
         {
             _pw_bridge_enabled = true;
             _num_input_chans += _pw_input_channels;

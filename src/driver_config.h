@@ -23,11 +23,15 @@
 #ifndef RASPA_DRIVER_CONFIG_H
 #define RASPA_DRIVER_CONFIG_H
 
+
 #include <fcntl.h>
 
+#include <optional>
 #include <cerrno>
 #include <string>
 #include <utility>
+#include <array>
+#include <algorithm>
 
 #define RASPA_PROCESSING_TASK_PRIO 90
 
@@ -82,7 +86,11 @@ constexpr char MAJ_VER_PARAM[] = "audio_ver_maj";
 constexpr char MIN_VER_PARAM[] = "audio_ver_min";
 constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
 constexpr char IRQ_AFFINITY[] = "audio_irq_affinity";
-
+constexpr char PW_INPUT_CHANS[] = "pipewire_input_channels";
+constexpr char PW_OUTPUT_CHANS[] = "pipewire_output_channels";
+constexpr char PW_FILE_INPUTS_KEY[] = "bridge_input_channels";
+constexpr char PW_FILE_OUTPUTS_KEY[] = "bridge_output_channels";
+constexpr char PW_CONFIG_FILE_PATH[] = "/etc/raspa/pipewire_bridge.conf";
 /**
  * @brief Enumeration to denote various codec sample formats
  */
@@ -165,6 +173,18 @@ enum class UsbAudioType : int
     NATIVE_ALSA,
     EXTERNAL_UC
 };
+
+std::optional<int> inline find_key(std::string_view key, std::string_view data)
+{
+    std::string_view kd = std::string_view(data).substr(data.find(key));
+    std::string value(kd.substr(key.size(), kd.find('\n')));
+    if (value.empty())
+    {
+        return std::nullopt;
+    }
+    std::replace(value.begin(), value.end(), '=', ' ');
+    return std::atoi(value.c_str());
+}
 
 /**
  * @brief Read driver params as int value
@@ -271,6 +291,18 @@ int inline get_audio_irq_affinity()
     return read_driver_param(IRQ_AFFINITY);
 }
 
+std::optional<std::pair<int, int>> inline get_pipewire_channels()
+{
+    int inputs = read_driver_param(PW_INPUT_CHANS);
+    int outputs = read_driver_param(PW_OUTPUT_CHANS);
+    if (inputs < 0 || outputs < 0)
+    {
+        return std::nullopt;
+    }
+    return {{inputs, outputs}};
+}
+
+
 /**
  * @brief Check if codec format given by driver is correct
  *
@@ -316,6 +348,29 @@ std::pair<bool, int> inline check_driver_version()
     }
 
     return {true, 0};
+}
+
+std::optional<std::pair<int, int>> inline get_pipewire_config_from_file(const char* path)
+{
+    auto fd = open(path, O_RDONLY);
+    if (fd < 0)
+    {
+        // failed to open
+        return std::nullopt;
+    }
+    std::array<char, 100> data;
+    auto res = read(fd, data.data(), data.size());
+    close(fd);
+    if (res > 0)
+    {
+        auto inputs = find_key(PW_FILE_INPUTS_KEY, data.data());
+        auto outputs = find_key(PW_FILE_OUTPUTS_KEY, data.data());
+        if (inputs && outputs)
+        {
+            return {{*inputs, *outputs}};
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace driver_conf

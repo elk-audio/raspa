@@ -70,6 +70,7 @@
 #include "sample_conversion.h"
 #include "raspa_alsa_usb.h"
 #include "raspa_run_logger.h"
+#include "raspa_pipewire_bridge.h"
 
 #ifdef RASPA_DEBUG_PRINT
     #include <stdio.h>
@@ -134,6 +135,9 @@ constexpr char XENOMAI_ARG_CPU_AFFINITY_QUAD_CORE[] = "--cpu-affinity=0,1,2,3";
 // Default usb audio type is none
 constexpr driver_conf::UsbAudioType DEFAULT_USB_AUDIO_TYPE = driver_conf::UsbAudioType::NONE;
 
+constexpr int DEFAULT_PW_INPUT_CHANNELS = 2;
+constexpr int DEFAULT_PW_OUTPUT_CHANNELS = 2;
+
 // Default cpu affinity
 constexpr int DEFAULT_CPU_AFFINITY = 0;
 
@@ -168,6 +172,8 @@ public:
             _user_audio_out{nullptr},
             _user_audio_in_usb{nullptr},
             _user_audio_out_usb{nullptr},
+            _user_audio_in_pw{nullptr},
+            _user_audio_out_pw{nullptr},
             _user_gate_in(0),
             _user_gate_out(0),
             _device_handle(-1),
@@ -193,6 +199,8 @@ public:
             _platform_type(driver_conf::PlatformType::NATIVE),
             _error_filter_process_count(0),
             _usb_audio_type(DEFAULT_USB_AUDIO_TYPE),
+            _pw_input_channels(DEFAULT_PW_INPUT_CHANNELS),
+            _pw_output_channels(DEFAULT_PW_OUTPUT_CHANNELS),
             _audio_packet_seq_num(0),
             _rt_task_id(0)
     {}
@@ -369,6 +377,18 @@ public:
             }
         }
 
+        if (_pw_input_channels > 0 || _pw_output_channels > 0)
+        {
+#ifndef RASPA_WITH_PIPEWIRE
+            return -RASPA_EPIPEWIRE_NOT_SUPPORTED;
+#endif
+            _pw_bridge = std::make_unique<RaspaPipewireBridge>();
+            if(!_pw_bridge->init(_sample_rate, _buffer_size_in_frames, _pw_input_channels, _pw_output_channels))
+            {
+                return -RASPA_EPIPEWIRE_INIT_FAILED;
+            }
+        }
+
         if (_run_logger_enable)
         {
             auto res = _run_logger.start(_run_logger_file_name);
@@ -448,6 +468,14 @@ public:
         if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
             _alsa_usb->start_usb_streams();
+        }
+
+        if (_pw_bridge)
+        {
+            if (!_pw_bridge->start_streams())
+            {
+                return -RASPA_EPIPEWIRE_INIT_FAILED;
+            }
         }
 
         return RASPA_SUCCESS;
@@ -557,6 +585,11 @@ public:
             // TODO - should we handle this error?
         }
 
+        if (_pw_bridge)
+        {
+            _pw_bridge->close();
+        }
+
         // Wait sometime for periodic task to send mute command to device
         // and for the buffers to be cleared
         usleep(STOP_REQUEST_DELAY_US);
@@ -636,6 +669,22 @@ protected:
         auto usb_audio_type = driver_conf::get_usb_audio_type();
         _cpu_affinity = driver_conf::get_audio_irq_affinity();
 
+        auto pw_channels = driver_conf::get_pipewire_channels();
+        if (!pw_channels)
+        {
+            pw_channels = driver_conf::get_pipewire_config_from_file(driver_conf::PW_CONFIG_FILE_PATH);  // Get pipewire config from file
+        }
+        if (pw_channels)
+        {
+            _pw_input_channels = pw_channels->first;
+            _pw_output_channels = pw_channels->second;
+        }
+        else
+        {
+            _pw_input_channels = 0;
+            _pw_output_channels = 0;
+        }
+
         // sanity checks on the parameters
         if (sample_rate < 0)
         {
@@ -671,8 +720,7 @@ protected:
         _sample_rate = static_cast<float>(sample_rate);
 
         // set internal platform type
-        if (platform_type < static_cast<int>(driver_conf::PlatformType::
-                                                                 NATIVE) ||
+        if (platform_type < static_cast<int>(driver_conf::PlatformType::NATIVE) ||
             platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
         {
             _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE,
@@ -682,8 +730,7 @@ protected:
         _platform_type = static_cast<driver_conf::PlatformType>(platform_type);
 
         // Set usb audio type
-        if (usb_audio_type < static_cast<int>(driver_conf::UsbAudioType::
-                                                                 NONE) ||
+        if (usb_audio_type < static_cast<int>(driver_conf::UsbAudioType::NONE) ||
             usb_audio_type > static_cast<int>(driver_conf::UsbAudioType::EXTERNAL_UC))
         {
             _raspa_error_code.set_error_val(RASPA_EUSBAUDIO_TYPE,
@@ -700,6 +747,14 @@ protected:
         {
             _num_input_chans += NUM_ALSA_USB_CHANNELS;
             _num_output_chans += NUM_ALSA_USB_CHANNELS;
+        }
+
+        // TODO - get the number of Pipewire channels from somewhere instead of hardcoding it
+        if (_pw_input_channels > 0 || _pw_output_channels > 0)
+        {
+            _pw_bridge_enabled = true;
+            _num_input_chans += _pw_input_channels;
+            _num_output_chans += _pw_output_channels;
         }
 
         return RASPA_SUCCESS;
@@ -931,12 +986,20 @@ protected:
     int _init_user_buffers()
     {
         _user_buffers_allocated = false;
+        int usb_offset = 0;
+
         int num_user_audio_samples = _driver_buffer_size_in_samples;
 
         // if UsbAudioType::NATIVE_ALSA, then allocate 2 more "virtual" channels
         if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
-            num_user_audio_samples += (NUM_ALSA_USB_CHANNELS * _buffer_size_in_frames);
+            usb_offset = NUM_ALSA_USB_CHANNELS * _buffer_size_in_frames;
+            num_user_audio_samples += usb_offset;
+        }
+        if (_pw_bridge_enabled)
+        {
+            int max_pw_channels = std::max(_pw_input_channels, _pw_output_channels);
+            num_user_audio_samples += (max_pw_channels * _buffer_size_in_frames);
         }
 
         int res = posix_memalign(reinterpret_cast<void**>(&_user_audio_in),
@@ -954,6 +1017,12 @@ protected:
         {
             _user_audio_in_usb = _user_audio_in + (_num_driver_input_chans * _buffer_size_in_frames);
             _user_audio_out_usb = _user_audio_out + (_num_driver_output_chans * _buffer_size_in_frames);
+        }
+
+        if (_pw_bridge_enabled)
+        {
+            _user_audio_in_pw = _user_audio_in + (_num_driver_input_chans * _buffer_size_in_frames) + usb_offset;
+            _user_audio_out_pw = _user_audio_out + (_num_driver_output_chans * _buffer_size_in_frames) + usb_offset;
         }
 
         if (res < 0)
@@ -1132,6 +1201,7 @@ protected:
         auto srate = static_cast<int>(_sample_rate);
         return _alsa_usb->init(srate, _buffer_size_in_frames, NUM_ALSA_USB_CHANNELS);
     }
+
 
     /**
      * @brief De init the sample converter instance.
@@ -1324,7 +1394,7 @@ protected:
         if (_usb_audio_type == driver_conf::UsbAudioType::NATIVE_ALSA)
         {
             int32_t* usb_in;
-            if (_alsa_usb->get_usb_input_samples(usb_in))
+            if (_alsa_usb->get_usb_input_samples(usb_in)) // Note - this is the failure case
             {
                 _clear_alsa_usb_buffer<float>(_user_audio_in_usb);
             }
@@ -1340,6 +1410,10 @@ protected:
             }
         }
 
+        if (_pw_bridge_enabled && _pw_input_channels > 0)
+        {
+            _pw_bridge->copy_to_input_buffer(_user_audio_in_pw, true); // Pipewire audio should already be in f32 format
+        }
 
         for(auto& converter : _input_sample_converter)
         {
@@ -1365,6 +1439,11 @@ protected:
 
             _alsa_usb->put_usb_output_samples(usb_out);
             _alsa_usb->increment_buf_indices();
+        }
+
+        if (_pw_bridge_enabled && _pw_output_channels > 0)
+        {
+            _pw_bridge->put_output_buffer(_user_audio_out_pw); // TODO - deal with errors later
         }
 
         if (_run_logger_enable)
@@ -1720,6 +1799,8 @@ protected:
     float* _user_audio_out;
     float* _user_audio_in_usb;
     float* _user_audio_out_usb;
+    float* _user_audio_in_pw;
+    float* _user_audio_out_pw;
     uint32_t _user_gate_in;
     uint32_t _user_gate_out;
     int _buf_idx;
@@ -1783,8 +1864,15 @@ protected:
     // Gpio Comm
     std::unique_ptr<RaspaGpioCom> _gpio_com;
 
+    // USB Alsa bridge
     driver_conf::UsbAudioType _usb_audio_type;
     std::unique_ptr<RaspaAlsaUsb> _alsa_usb;
+
+    // Pipewire audio bridge
+    std::unique_ptr<RaspaPipewireBridge> _pw_bridge;
+    bool _pw_bridge_enabled;
+    int  _pw_input_channels;
+    int  _pw_output_channels;
 
     // seq number for audio control packets
     uint32_t _audio_packet_seq_num;

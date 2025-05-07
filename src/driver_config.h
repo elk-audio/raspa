@@ -23,11 +23,15 @@
 #ifndef RASPA_DRIVER_CONFIG_H
 #define RASPA_DRIVER_CONFIG_H
 
+
 #include <fcntl.h>
 
+#include <optional>
 #include <cerrno>
 #include <string>
 #include <utility>
+#include <array>
+#include <algorithm>
 
 #define RASPA_PROCESSING_TASK_PRIO 90
 
@@ -82,7 +86,11 @@ constexpr char MAJ_VER_PARAM[] = "audio_ver_maj";
 constexpr char MIN_VER_PARAM[] = "audio_ver_min";
 constexpr char USB_AUDIO_TYPE_PARAM[] = "usb_audio_type";
 constexpr char IRQ_AFFINITY[] = "audio_irq_affinity";
-
+constexpr char PW_INPUT_CHANS[] = "pipewire_input_channels";
+constexpr char PW_OUTPUT_CHANS[] = "pipewire_output_channels";
+constexpr char PW_FILE_INPUTS_KEY[] = "bridge_input_channels";
+constexpr char PW_FILE_OUTPUTS_KEY[] = "bridge_output_channels";
+constexpr char PW_CONFIG_FILE_PATH[] = "/etc/raspa/pipewire_bridge.conf";
 /**
  * @brief Enumeration to denote various codec sample formats
  */
@@ -166,13 +174,25 @@ enum class UsbAudioType : int
     EXTERNAL_UC
 };
 
+std::optional<int> inline find_key(std::string_view key, std::string_view data)
+{
+    std::string_view kd = std::string_view(data).substr(data.find(key));
+    std::string value(kd.substr(key.size(), kd.find('\n')));
+    if (value.empty())
+    {
+        return std::nullopt;
+    }
+    std::replace(value.begin(), value.end(), '=', ' ');
+    return std::atoi(value.c_str());
+}
+
 /**
  * @brief Read driver params as int value
  *
  * @param param_name The param name
  * @return int negative error code upon failure, >=0 upon success
  */
-int read_driver_param(const char* param_name)
+int inline read_driver_param(const char* param_name)
 {
     auto param_path = std::string(PARAM_ROOT_PATH) + param_name;
     std::string param_str(PARAM_VAL_STR_LEN, '\0');
@@ -206,7 +226,7 @@ int read_driver_param(const char* param_name)
  *
  * @return int The sample rate
  */
-int get_sample_rate()
+int inline get_sample_rate()
 {
     return read_driver_param(SAMPLE_RATE_PARAM);
 }
@@ -216,7 +236,7 @@ int get_sample_rate()
  *
  * @return int The number of input channels
  */
-int get_num_input_chan()
+int inline get_num_input_chan()
 {
     return read_driver_param(NUM_INPUT_CHANS_PARAM);
 }
@@ -226,7 +246,7 @@ int get_num_input_chan()
  *
  * @return int The number of output channels
  */
-int get_num_output_chan()
+int inline get_num_output_chan()
 {
     return read_driver_param(NUM_OUTPUT_CHANS_PARAM);
 }
@@ -236,7 +256,7 @@ int get_num_output_chan()
  *
  * @return int one of PlatformType
  */
-int get_platform_type()
+int inline get_platform_type()
 {
     return read_driver_param(PLATFORM_TYPE_PARAM);
 }
@@ -246,7 +266,7 @@ int get_platform_type()
  *
  * @return int one of PlatformType
  */
-int get_buffer_size()
+int inline get_buffer_size()
 {
     return read_driver_param(BUFFER_SIZE_PARAM);
 }
@@ -256,7 +276,7 @@ int get_buffer_size()
  *
  * @return int one of UsbAudioType
  */
-int get_usb_audio_type()
+int inline get_usb_audio_type()
 {
     return read_driver_param(USB_AUDIO_TYPE_PARAM);
 }
@@ -266,10 +286,22 @@ int get_usb_audio_type()
  *
  * @return int (cpu num)
  */
-int get_audio_irq_affinity()
+int inline get_audio_irq_affinity()
 {
     return read_driver_param(IRQ_AFFINITY);
 }
+
+std::optional<std::pair<int, int>> inline get_pipewire_channels()
+{
+    int inputs = read_driver_param(PW_INPUT_CHANS);
+    int outputs = read_driver_param(PW_OUTPUT_CHANS);
+    if (inputs < 0 || outputs < 0)
+    {
+        return std::nullopt;
+    }
+    return {{inputs, outputs}};
+}
+
 
 /**
  * @brief Check if codec format given by driver is correct
@@ -278,7 +310,7 @@ int get_audio_irq_affinity()
  * @return std::pair<bool, CodecFormat> true and CodecFormat if codec_format is valid
  *                                      false and CodecFormat::NONE if invalid
  */
-std::pair<bool, CodecFormat> check_codec_format(int codec_format)
+std::pair<bool, CodecFormat> inline  check_codec_format(int codec_format)
 {
     if (codec_format <= static_cast<int>(CodecFormat::NONE) ||
         codec_format >= static_cast<int>(CodecFormat::NUM_CODEC_FORMATS))
@@ -295,7 +327,7 @@ std::pair<bool, CodecFormat> check_codec_format(int codec_format)
  * @return std::pair<bool, int> false if version mismatches along with the
            mismatched version, true upon success
  */
-std::pair<bool, int> check_driver_version()
+std::pair<bool, int> inline check_driver_version()
 {
     auto major_ver = read_driver_param(MAJ_VER_PARAM);
     auto minor_ver = read_driver_param(MIN_VER_PARAM);
@@ -316,6 +348,29 @@ std::pair<bool, int> check_driver_version()
     }
 
     return {true, 0};
+}
+
+std::optional<std::pair<int, int>> inline get_pipewire_config_from_file(const char* path)
+{
+    auto fd = open(path, O_RDONLY);
+    if (fd < 0)
+    {
+        // failed to open
+        return std::nullopt;
+    }
+    std::array<char, 100> data;
+    auto res = read(fd, data.data(), data.size());
+    close(fd);
+    if (res > 0)
+    {
+        auto inputs = find_key(PW_FILE_INPUTS_KEY, data.data());
+        auto outputs = find_key(PW_FILE_OUTPUTS_KEY, data.data());
+        if (inputs && outputs)
+        {
+            return {{*inputs, *outputs}};
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace driver_conf

@@ -11,6 +11,7 @@ project(raspalib)
 option(RASPA_WITH_APPS "Build included applications" ON)
 option(RASPA_WITH_TESTS "Build and run unit tests" OFF)
 option(RASPA_WITH_EVL "Build Raspa for EVL based drivers" ON)
+option(RASPA_WITH_PIPEWIRE "Build Raspa with integrated Pipewire bridge" ON)
 
 #######################
 #  Cross compilation  #
@@ -63,6 +64,10 @@ set(RASPALIB_EXTRA_CLION_SOURCES src/driver_config.h
 
 set(RASPALIB_COMPILATION_UNITS src/raspa_api_wrapper.cpp)
 
+if (${RASPA_WITH_PIPEWIRE})
+    set(RASPALIB_COMPILATION_UNITS ${RASPALIB_COMPILATION_UNITS} src/raspa_pipewire_bridge.cpp)
+endif()
+
 set(RASPALIB_SOURCE_FILES "${RASPALIB_COMPILATION_UNITS}" "${RASPALIB_EXTRA_CLION_SOURCES}")
 
 add_library(raspa STATIC ${RASPALIB_SOURCE_FILES})
@@ -72,6 +77,15 @@ if (${RASPA_WITH_EVL})
     target_link_libraries(raspa PRIVATE evl)
 else()
     add_xenomai_to_target(raspa)
+endif()
+
+if (${RASPA_WITH_PIPEWIRE})
+    target_compile_definitions(raspa PUBLIC -DRASPA_WITH_PIPEWIRE)
+    target_include_directories(raspa PRIVATE ${PROJECT_SOURCE_DIR}/../pipewire/src/
+                                             ${PROJECT_SOURCE_DIR}/../pipewire/spa/include
+            ${CMAKE_SYSROOT}/usr/include/pipewire-0.3
+            ${CMAKE_SYSROOT}/usr/include/spa-0.2)
+    target_link_libraries(raspa PUBLIC pipewire-0.3)
 endif()
 
 target_include_directories(raspa PUBLIC ${PROJECT_SOURCE_DIR}/include)

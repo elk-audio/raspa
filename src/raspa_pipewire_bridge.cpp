@@ -24,7 +24,6 @@ static void registry_event_global(void* /*data*/, uint32_t /*id*/,
                                   uint32_t /*permissions*/, const char* /*type*/, uint32_t /*version*/,
                                   const struct spa_dict* /*props*/)
 {
-    //printf("object: id:%u type:%s/%d\n", id, type, version);
 }
 
 static const pw_registry_events registry_events ={.version = PW_VERSION_REGISTRY_EVENTS,

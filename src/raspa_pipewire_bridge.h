@@ -74,8 +74,8 @@ private:
     pw_registry*    _registry{nullptr};
     spa_hook        _registry_listener;
 
-    pw_stream*      _input_stream;
-    pw_stream*      _output_stream;
+    pw_stream*      _input_stream{nullptr};
+    pw_stream*      _output_stream{nullptr};
 
     pw_stream_events _input_stream_events;
     pw_stream_events _output_stream_events;

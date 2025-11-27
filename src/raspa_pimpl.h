@@ -1715,6 +1715,7 @@ protected:
                 _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
                 _parse_rx_pkt(_rx_pkt[_buf_idx]);
+                audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
                 _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
                                     _driver_buffer_audio_out[_buf_idx]);
                 _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);

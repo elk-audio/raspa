@@ -115,12 +115,16 @@ enum class CodecFormat : int
  *          GPIO system and the host machine interacts with it asynchronously.
  * SYNC   : Indicates that a secondary controller interfaces with the codec and
  *          GPIO system and the host machine interacts with it synchronously.
+ * SYNC_ALT_MEM_LAYOUT : Same as SYNC but with alternate memory layout.
+ * ASYNC_ALT_MEM_LAYOUT : Same as ASYNC but with alternate memory layout.
  */
 enum class PlatformType : int
 {
     NATIVE = 1,
     SYNC,
-    ASYNC
+    ASYNC,
+    SYNC_ALT_MEM_LAYOUT,
+    ASYNC_ALT_MEM_LAYOUT
 };
 
 /**

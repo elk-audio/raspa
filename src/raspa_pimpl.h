@@ -353,7 +353,8 @@ public:
         }
 
         // Delay filter is needed for synchronization
-        if (_platform_type == driver_conf::PlatformType::SYNC)
+        if ((_platform_type == driver_conf::PlatformType::SYNC) ||
+            (_platform_type == driver_conf::PlatformType::SYNC_ALT_MEM_LAYOUT))
         {
             _init_delay_error_filter();
         }
@@ -500,10 +501,12 @@ public:
             break;
 
         case driver_conf::PlatformType::SYNC:
+        case driver_conf::PlatformType::SYNC_ALT_MEM_LAYOUT:
             _rt_loop_sync();
             break;
 
         case driver_conf::PlatformType::ASYNC:
+        case driver_conf::PlatformType::ASYNC_ALT_MEM_LAYOUT:
             _rt_loop_async();
             break;
         }
@@ -721,7 +724,7 @@ protected:
 
         // set internal platform type
         if (platform_type < static_cast<int>(driver_conf::PlatformType::NATIVE) ||
-            platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC))
+            platform_type > static_cast<int>(driver_conf::PlatformType::ASYNC_ALT_MEM_LAYOUT))
         {
             _raspa_error_code.set_error_val(RASPA_EPLATFORM_TYPE,
                                             platform_type);
@@ -898,27 +901,50 @@ protected:
      *        The arrangement of the buffers are dependent on the platform
      *        type as those which use external micro controllers use the
      *        audio control protocol to communicate info to it. The arrangement
-     *        of the driver buffer is as follows
+     *        of the driver buffer is as follows, with rx meaning input to RASPA
+     *        and tx meaning output from RASPA.
      *
      *        For PlatformType::NATIVE:
-     *        1. audio buffer in number 0
-     *        2. audio buffer in number 1
-     *        3. audio buffer out number 0
-     *        4. audio buffer out number 1
+     *        1. rx audio buffer 0
+     *        2. rx audio buffer 1
+     *        3. tx audio buffer 0
+     *        4. tx audio buffer 1
      *
-     *        For other platform types
+     *        For PlatformType::SYNC and PlatformType::ASYNC:
      *        1. rx device control packet 0
-     *        2. rx audio control packet number 0
-     *        3. audio buffer in number 0
+     *        2. rx audio control packet 0
+     *        3. rx audio buffer 0
      *        4. rx device control packet 1
-     *        5. rx audio control packet number 1
-     *        6. audio buffer in number 1
+     *        5. rx audio control packet 1
+     *        6. rx audio buffer 1
      *        7. tx device control packet 0
-     *        8. tx audio control packet number 0
-     *        9. audio buffer out number 0
+     *        8. tx audio control packet 0
+     *        9. tx audio buffer 0
      *        10. tx device control packet 1
-     *        11. tx audio control packet number 1
-     *        12. audio buffer out number 1
+     *        11. tx audio control packet 1
+     *        12. tx audio buffer 1
+     *
+     *        This memory layout reserves (also for legacy compatibility) space for
+     *        device control packets in the audio buffers memory space.
+     *        The device control protocol buffers may be used or not by the audio driver
+     *        depending on the particular platform implementation.
+     *        The device control protocol buffers are not used by RASPA.
+     *
+     *        For PlatformType::SYNC_ALT_MEM_LAYOUT and PlatformType::ASYNC_ALT_MEM_LAYOUT:
+     *        1. rx audio control packet 0
+     *        2. rx audio control packet 1
+     *        3. tx audio control packet 0
+     *        4. tx audio control packet 1
+     *        5. rx audio buffer 0
+     *        6. rx audio buffer 1
+     *        7. tx audio buffer 0
+     *        8. tx audio buffer 1
+     *
+     *        Please note that with alternate memory layout the device control
+     *        packets are not in the audio buffers memory space, but are handled
+     *        at a different memory offset.
+     *        The device control protocol buffers are not used by RASPA.
+     *
      */
     void _init_driver_buffers()
     {
@@ -934,29 +960,59 @@ protected:
          */
         if (_platform_type != driver_conf::PlatformType::NATIVE)
         {
-            int32_t* ptr = _driver_buffer + DEVICE_CTRL_PKT_SIZE_WORDS;
-            _rx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*> (ptr);
+            if ((_platform_type == driver_conf::PlatformType::SYNC_ALT_MEM_LAYOUT) ||
+                (_platform_type == driver_conf::PlatformType::ASYNC_ALT_MEM_LAYOUT))
+            {
+                int32_t* ptr = _driver_buffer;
+                _rx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*> (ptr);
 
-            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
-            _driver_buffer_audio_in[0] = ptr;
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*> (ptr);
 
-            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
-            _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
-            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
-            _driver_buffer_audio_in[1] = ptr;
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
 
-            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
-            _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _driver_buffer_audio_in[0] = ptr;
 
-            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
-            _driver_buffer_audio_out[0] = ptr;
+                ptr += _driver_buffer_size_in_samples;
+                _driver_buffer_audio_in[1] = ptr;
 
-            ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
-            _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+                ptr += _driver_buffer_size_in_samples;
+                _driver_buffer_audio_out[0] = ptr;
 
-            ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
-            _driver_buffer_audio_out[1] = ptr;
+                ptr += _driver_buffer_size_in_samples;
+                _driver_buffer_audio_out[1] = ptr;
+            }
+            else
+            {
+                int32_t* ptr = _driver_buffer + DEVICE_CTRL_PKT_SIZE_WORDS;
+                _rx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*> (ptr);
+
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _driver_buffer_audio_in[0] = ptr;
+
+                ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+                _rx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _driver_buffer_audio_in[1] = ptr;
+
+                ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+                _tx_pkt[0] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _driver_buffer_audio_out[0] = ptr;
+
+                ptr += _driver_buffer_size_in_samples + DEVICE_CTRL_PKT_SIZE_WORDS;
+                _tx_pkt[1] = reinterpret_cast<audio_ctrl::AudioCtrlPkt*>(ptr);
+
+                ptr += AUDIO_CTRL_PKT_SIZE_WORDS;
+                _driver_buffer_audio_out[1] = ptr;
+            }
         }
         else
         {
@@ -1290,7 +1346,8 @@ protected:
 
         _deinit_sample_converter();
 
-        if (_platform_type == driver_conf::PlatformType::SYNC)
+        if ((_platform_type == driver_conf::PlatformType::SYNC) ||
+            (_platform_type == driver_conf::PlatformType::SYNC_ALT_MEM_LAYOUT))
         {
             _deinit_delay_error_filter();
         }
@@ -1658,6 +1715,7 @@ protected:
                 _user_gate_in = audio_ctrl::get_gate_in_val(_rx_pkt[_buf_idx]);
 
                 _parse_rx_pkt(_rx_pkt[_buf_idx]);
+                audio_ctrl::clear_audio_ctrl_pkt(_rx_pkt[_buf_idx]);
                 _perform_user_callback(_driver_buffer_audio_in[_buf_idx],
                                     _driver_buffer_audio_out[_buf_idx]);
                 _get_next_tx_pkt_data(_tx_pkt[_buf_idx]);

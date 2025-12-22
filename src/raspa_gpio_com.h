@@ -42,7 +42,7 @@ namespace {
     constexpr std::chrono::microseconds SOCKET_TIMEOUT(250000);
 
     // periodicity of the write thread
-    constexpr std::chrono::milliseconds WRITE_LOOP_PERIOD(100);
+    constexpr std::chrono::milliseconds WRITE_LOOP_PERIOD(10);
 
     // Timeout period to wait for the rt thread to consume an element from a fifo.
     constexpr std::chrono::milliseconds WAIT_FOR_RT_FIFO_TIMEOUT(10);

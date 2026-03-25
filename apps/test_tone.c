@@ -30,14 +30,20 @@
 
 #include "raspa/raspa.h"
 
-#define DEFAULT_NUM_FRAMES 64
+#define DEFAULT_NUM_FRAMES  64
+#define DEFAULT_OUTPUT_FREQ 440.0f
+#define MIN_OUTPUT_FREQ 20.0f
+#define MAX_OUTPUT_FREQ 20000.0f
+#define DEFAULT_OUTPUT_GAIN 0.7f
+#define MIN_OUTPUT_GAIN 0.0f
+#define MAX_OUTPUT_GAIN 1.0f
 
 static int num_frames = DEFAULT_NUM_FRAMES;
 static bool log_file_enabled = false;
 static int num_output_chans = 0;
 static float sampling_rate = 0.0f;
-const static float output_gain = 0.7f;
-const static float output_freq = 440.0f;
+static float output_gain = DEFAULT_OUTPUT_GAIN;
+static float output_freq = DEFAULT_OUTPUT_FREQ;
 static int sample_counter = 0;
 static bool stop_flag = false;
 
@@ -53,9 +59,13 @@ void print_usage(char *argv[])
     printf("%s [-b]\n", argv[0]);
     printf("Options:\n");
     printf("    -h               : Help for usage options.\n");
-    printf("    -b <buffer size> : Specify the audio buffer size. \n"
+    printf("    -b <buffer size> : Specify the audio buffer size.\n"
            "                       Default is %d. Ideally should be a \n"
            "                       power of 2\n", DEFAULT_NUM_FRAMES);
+    printf("    -f               : Set output frequency (%f to %f).\n"
+           "                       Default is %f.\n", MIN_OUTPUT_FREQ, MAX_OUTPUT_FREQ, DEFAULT_OUTPUT_FREQ);
+    printf("    -g               : Set output gain (%f to %f)\n"
+           "                       Default is %f\n", MIN_OUTPUT_GAIN, MAX_OUTPUT_GAIN, DEFAULT_OUTPUT_GAIN);
     printf("    -l               : Enable logging to %s\n", RASPA_DEFAULT_RUN_LOG_FILE);
     printf("    - stop the program with SIGINT\n\n");
 }
@@ -86,7 +96,7 @@ int main(int argc, char *argv[])
     int option = 0;
 
     // Argument parsing
-    while ((option = getopt(argc, argv, "hb:l")) != -1)
+    while ((option = getopt(argc, argv, "hb:f:g:l")) != -1)
     {
         switch (option)
         {
@@ -97,6 +107,24 @@ int main(int argc, char *argv[])
 
         case 'b' :
             num_frames = atoi(optarg);
+            break;
+
+        case 'f' :
+            output_freq = (float)atof(optarg);
+            if ((output_freq < MIN_OUTPUT_FREQ) || (output_freq > MAX_OUTPUT_FREQ))
+            {
+                fprintf(stderr, "Error: output frequency %f out of range\n", output_freq);
+                exit(-1);
+            }
+            break;
+
+        case 'g' :
+            output_gain = atof(optarg);
+            if ((output_gain < MIN_OUTPUT_GAIN) || (output_gain > MAX_OUTPUT_GAIN))
+            {
+                fprintf(stderr, "Error: output gain %f out of range\n", output_gain);
+                exit(-1);
+            }
             break;
 
         case 'l' :
@@ -130,6 +158,8 @@ int main(int argc, char *argv[])
     sampling_rate = raspa_get_sampling_rate();
 
     printf("Test tone audio process started.\n");
+    printf("Output frequency = %fHz.\n", output_freq);
+    printf("Output gain      = %f\n", output_gain);
     raspa_start_realtime();
 
     // Non-RT processing loop

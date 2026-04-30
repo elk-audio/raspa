@@ -28,6 +28,12 @@ if(NOT "${CMAKE_SYSROOT}" STREQUAL "")
     message("XENOMAI_BASE_DIR is " ${XENOMAI_BASE_DIR})
 endif()
 
+############################
+#  3rd party dependencies  #
+############################
+
+add_subdirectory(third-party)
+
 #######################
 #  Utility functions  #
 #######################

@@ -4,3 +4,6 @@
 [submodule "audio_control_protocol"]
 	path = audio-control-protocol
 	url = ../audio-control-protocol.git
+[submodule "third-party/json"]
+	path = third-party/json
+	url = https://github.com/nlohmann/json.git

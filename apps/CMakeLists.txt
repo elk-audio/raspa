@@ -2,6 +2,8 @@
 #  Source Files  #
 ##################
 
+add_subdirectory(audio_test)
+
 find_package(SndFile CONFIG REQUIRED)
 
 set(LOOPBACK_SOURCE_FILES loopback.c)

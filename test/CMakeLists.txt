@@ -14,6 +14,10 @@ SET(TEST_FILES
     unittests/sample_conversion_test.cpp
 )
 
+if (RASPA_WITH_APPS)
+    set(TEST_FILES ${TEST_FILES} unittests/audio_test_app_test.cpp)
+endif()
+
 ##########################################
 #  Include directories relative to test  #
 ##########################################
@@ -46,7 +50,6 @@ target_link_libraries(test_runner PRIVATE ${TEST_LINK_LIBRARIES})
 set_property(TARGET test_runner PROPERTY CXX_STANDARD 17)
 
 add_test(test_runner unit_tests)
-
 
 # Execute tests if we are not cross-compiling
 if(CMAKE_CROSSCOMPILING)

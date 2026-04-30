@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "audio_test.cpp"
+#include "audio_test/audio_test.cpp"
 
 // A simple test case
 TEST (SampleTest, SimpleTestCase) {

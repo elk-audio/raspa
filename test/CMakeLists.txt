@@ -15,7 +15,9 @@ SET(TEST_FILES
 )
 
 if (RASPA_WITH_APPS)
-    set(TEST_FILES ${TEST_FILES} unittests/audio_test_app_test.cpp)
+    set(TEST_FILES ${TEST_FILES}
+        unittests/audio_test_app_test.cpp
+    )
 endif()
 
 ##########################################
@@ -26,6 +28,7 @@ endif()
 # as Cobalt redefines some Posix stuff that is incompatible with GTest
 set(TEST_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/apps
     ${PROJECT_SOURCE_DIR}/src/sample_conversion
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/test/unittests
@@ -42,12 +45,20 @@ set(TEST_LINK_LIBRARIES
     m
 )
 
+if (RASPA_WITH_APPS)
+    set(TEST_LINK_LIBRARIES ${TEST_LINK_LIBRARIES}
+        nlohmann_json::nlohmann_json
+    )
+endif()
+
+
+
 add_executable(test_runner ${TEST_FILES})
 
 target_compile_options(test_runner PRIVATE -DDISABLE_LOGGING)
 target_include_directories(test_runner PRIVATE ${TEST_INCLUDE_DIRS})
 target_link_libraries(test_runner PRIVATE ${TEST_LINK_LIBRARIES})
-set_property(TARGET test_runner PROPERTY CXX_STANDARD 17)
+set_property(TARGET test_runner PROPERTY CXX_STANDARD 20)
 
 add_test(test_runner unit_tests)
 

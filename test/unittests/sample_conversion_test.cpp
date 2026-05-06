@@ -68,6 +68,8 @@ protected:
             case driver_conf::CodecFormat::INT32:
                 // No conversion needed
                 break;
+            default:
+                break;
             }
             sample = value;
             sample_index++;

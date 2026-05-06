@@ -51,8 +51,6 @@ if (RASPA_WITH_APPS)
     )
 endif()
 
-
-
 add_executable(test_runner ${TEST_FILES})
 
 target_compile_options(test_runner PRIVATE -DDISABLE_LOGGING)
@@ -61,6 +59,7 @@ target_link_libraries(test_runner PRIVATE ${TEST_LINK_LIBRARIES})
 set_property(TARGET test_runner PROPERTY CXX_STANDARD 20)
 
 add_test(test_runner unit_tests)
+target_compile_options(test_runner PUBLIC -Wno-psabi)
 
 # Execute tests if we are not cross-compiling
 if(CMAKE_CROSSCOMPILING)

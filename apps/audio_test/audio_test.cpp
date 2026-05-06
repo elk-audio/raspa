@@ -1,10 +1,6 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
-#include <iostream>
-
-#include <nlohmann/json.hpp>
-using json = nlohmann::json;
 
 #include "audio_test.h"
 #include "analysis.h"
@@ -72,7 +68,7 @@ bool Test::record_audio(const float* audio, int frames)
     _delay_samples = std::max(0, _delay_samples - (frames - frames_to_copy));
 
     assert(_recorded_samples <= _audio_length);
-    assert(_recorded_audio[0].size() <= _audio_length);
+    assert(_recorded_audio[0].size() <= static_cast<size_t>(_audio_length));
     if (_recorded_samples == _audio_length)
     {
         _done = true;
@@ -141,7 +137,7 @@ json NoiseTest::NoiseReport::details()
 
 float NoiseTest::NoiseReport::noise_level(int channel)
 {
-    if (channel < _noise_db.size() && channel >= 0 )
+    if (channel < static_cast<int>(_noise_db.size()) && channel >= 0 )
     {
         return _noise_db.at(channel);
     }
@@ -156,7 +152,7 @@ NoiseTest::NoiseTest(const TestConfig& config, float noise_pass_level_db) : Test
 std::unique_ptr<Report> NoiseTest::analyse()
 {
     std::vector<float> noise_db;
-    for (int i= 0; i < _recorded_audio.size(); ++i)
+    for (int i= 0; i < static_cast<int>(_recorded_audio.size()); ++i)
     {
         noise_db.push_back(to_db(calc_rms(_recorded_audio[i])));
     }
@@ -173,13 +169,13 @@ FrequencyTest::FrequencyReport::FrequencyReport(const std::vector<int>& ignored_
 
 const std::vector<float>& FrequencyTest::FrequencyReport::frequency_response(int channel) const
 {
-    assert(channel < _responses.size() && channel >= 0);
+    assert(channel < static_cast<int>(_responses.size()) && channel >= 0);
     return _responses[channel];
 }
 
 std::pair<float, float> FrequencyTest::FrequencyReport::min_max_values(int channel) const
 {
-    assert(channel < _responses.size() && channel >= 0);
+    assert(channel < static_cast<int>(_responses.size()) && channel >= 0);
     auto [min, max] = std::minmax_element(_responses[channel].begin() + _low_cutoff, _responses[channel].begin() + _high_cutoff);
     return {*min, *max};
 }
@@ -277,7 +273,7 @@ std::unique_ptr<Report> FrequencyTest::analyse()
 {
     std::vector<std::vector<float>> freq_resp;
 
-    for (int i= 0; i < _recorded_audio.size(); ++i)
+    for (int i= 0; i < static_cast<int>(_recorded_audio.size()); ++i)
     {
         auto bins = complex_abs(fft(_recorded_audio[i]));
         // fft is symmetric so we only need half of it.
@@ -433,7 +429,7 @@ bool MuteTest::MuteReport::passed()
 
 float MuteTest::MuteReport::level_db(int channel) const
 {
-    assert(channel >= 0 && channel < _peak_db.size());
+    assert(channel >= 0 && channel < static_cast<int>(_peak_db.size()));
     return _peak_db[channel];
 }
 

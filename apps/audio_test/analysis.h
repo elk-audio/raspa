@@ -92,7 +92,7 @@ inline std::vector<float> complex_abs(const std::valarray<Complex>& x)
 inline std::vector<float> xcorr(const std::vector<float>& a, const std::vector<float>& b)
 {
     std::vector<float> result;
-    for (int i = 0; i < a.size(); ++i)
+    for (int i = 0; i < static_cast<int>(a.size()); ++i)
     {
         float sum = 0.0f;
         for (int j = 0 ; j <= i ; ++j)
@@ -101,10 +101,10 @@ inline std::vector<float> xcorr(const std::vector<float>& a, const std::vector<f
         }
         result.push_back(sum);
      }
-    for (int i = 1; i < a.size(); ++i)
+    for (int i = 1; i < static_cast<int>(a.size()); ++i)
     {
         float sum = 0.0f;
-        for (int j = 0 ; j <= a.size() - 1 - i ; ++j)
+        for (int j = 0 ; j <= static_cast<int>(a.size()) - 1 - i ; ++j)
         {
             sum += a[j] * b[i + j];
         }

@@ -141,7 +141,7 @@ class BaseSampleConverter
 public:
     BaseSampleConverter() = default;
 
-    ~BaseSampleConverter() = default;
+    virtual ~BaseSampleConverter() = default;
 
     /**
      * @brief deinterleaves samples and converts it from the native codec format

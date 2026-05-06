@@ -7,9 +7,6 @@
 #include <thread>
 #include <filesystem>
 
-#include <nlohmann/json.hpp>
-using json = nlohmann::json;
-
 #include "options.h"
 #ifdef DUMMY_AUDIO
 typedef void (*RaspaProcessCallback)(float* input, float* output, void* data);
@@ -393,7 +390,7 @@ int main(int argc, char* argv[])
     realtime_data.done = true;
 
 #ifdef DUMMY_AUDIO
-    int res = init_dummy_audio(&realtime_data, setup->buffersize);
+    init_dummy_audio(&realtime_data, setup->buffersize);
 #else
     int res = raspa_init();
     if (res == 0)

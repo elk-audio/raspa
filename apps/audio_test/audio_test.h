@@ -11,8 +11,11 @@
 #include <span>
 #include <atomic>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpsabi"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
+#pragma GCC diagnostic pop
 
 class BaseClassTestCase;
 

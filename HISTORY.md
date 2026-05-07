@@ -1,3 +1,23 @@
+## 1.2.4
+New features:
+* Added audio test app.
+
+## 1.2.3
+Fixes:
+* Add output gain and output frequency CLI parameters to test tone app.
+
+## 1.2.2
+Fixes:
+* Reduced GPIO socket write latency.
+
+## 1.2.1
+New features:
+* Pipewire integration.
+* Support alternate shared memory layout.
+
+Fixes:
+* Memory allocation problem in latency app.
+
 ## 1.2.0
 New features:
 * Added latency monitor app.
